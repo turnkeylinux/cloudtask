@@ -5,15 +5,21 @@ import time
 
 from multiprocessing import Process
 
-def f(name):
+def f(name, seconds):
     print 'from %d hello %s' % (os.getpid(), name)
-    time.sleep(10)
+    time.sleep(seconds)
 
 def main():
     print "parent pid: %d" % (os.getpid())
-    p = Process(target=f, args=('bob',))
-    p.start()
-    p.join()
+    procs = []
+    for i in range(10):
+        p = Process(target=f, args=('bob', i))
+        p.start()
+        procs.append(p)
+
+    for p in procs:
+        p.join()
+
     print "after join"
 
 if __name__ == '__main__':
