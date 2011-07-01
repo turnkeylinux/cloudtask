@@ -12,10 +12,11 @@ if __name__ == '__main__':
             l.acquire()
         s = 'hello world ' + str(i)
         for i in range(len(s)):
-            print s[i],
+            sys.stdout.write(s[i])
             sys.stdout.flush()
             time.sleep(0.00001)
         print
+        sys.stdout.flush()
 
         if locking:
             l.release()
