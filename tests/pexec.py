@@ -39,7 +39,7 @@ class Timeout:
         return False
 
 def run_command(command, output_path, timeout=None):
-    if True or output_path == '-':
+    if output_path == '-':
         fh = sys.stdout
     else:
         fh = file(output_path, 'a')
@@ -54,6 +54,9 @@ def run_command(command, output_path, timeout=None):
             output = c.fromchild.read_nonblock()
             if output:
                 fh.write(output)
+                fh.flush()
+            else:
+                time.sleep(0.1)
 
         except c.fromchild.EOF:
             c.wait()
@@ -66,6 +69,8 @@ def run_command(command, output_path, timeout=None):
             c.terminate()
             print >> fh, "# TIMED OUT"
             break
+
+    fh.write(c.fromchild.read())
 
     if c.exitcode:
         print >> fh, "# NON-ZERO EXITCODE: %d" % c.exitcode
