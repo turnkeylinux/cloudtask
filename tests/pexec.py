@@ -86,7 +86,7 @@ class CommandExecutor:
     def _subprocess(self):
         fh = file(os.path.join(self.split_logs, "%d" % os.getpid()), "w")
 
-        for job in iter(self.q_todo.get, self.MAGIC_STOP):
+        for job in iter(self.jobs.get, self.MAGIC_STOP):
             result = self._execute(job, fh, self.timeout)
             self.results.append((job, result))
 
@@ -111,7 +111,7 @@ class CommandExecutor:
             raise self.Error("bad split (%d) minimum is 2" % split)
 
         self.split_logs = split_logs
-        self.q_todo = Queue()
+        self.jobs = Queue()
 
         procs = []
 
@@ -130,14 +130,14 @@ class CommandExecutor:
             result = self._execute(job, sys.stdout, self.timeout)
             self.results.append((job, result))
         else:
-            self.q_todo.put(job)
+            self.jobs.put(job)
 
     def join(self):
         if not self.split:
             return
 
         for i in range(self.split):
-            self.q_todo.put(self.MAGIC_STOP)
+            self.jobs.put(self.MAGIC_STOP)
 
         for proc in self.procs:
             proc.join()
@@ -215,7 +215,7 @@ def main():
     exitcodes = [ exitcode for command, exitcode in executor.results ]
 
     succeeded = exitcodes.count(0)
-    failed = len(exitcodes) - ok
+    failed = len(exitcodes) - succeeded
 
     print "%d commands executed (%d succeeded, %d failed)" % (len(exitcodes),
                                                               succeeded, failed)
