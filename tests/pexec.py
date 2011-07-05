@@ -38,51 +38,49 @@ class Timeout:
             return True
         return False
 
-def run_command(command, output_path, timeout=None):
-    if output_path == '-':
-        fh = sys.stdout
-    else:
-        fh = file(output_path, 'a')
+class DatedLog:
+    def __init__(self, fh):
+        self.fh = fh
 
-    c = Command(command, setpgrp=True)
-    print >> fh, "# EXECUTING: " + str(c)
+    def __call__(self, msg):
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        print >> self.fh, "# %s: %s" % (timestamp, msg)
+
+        if self.fh != sys.stdout:
+            print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
+
+def run_command(command, outfh, timeout=None):
+    log = DatedLog(outfh)
+
+    command = Command(command, setpgrp=True)
+    log(str(command))
 
     timeout = Timeout(timeout)
-    while True:
+    def handler(command, buf):
+        if buf:
+            outfh.write(buf)
+            outfh.flush()
 
-        try:
-            output = c.fromchild.read_nonblock()
-            if output:
-                fh.write(output)
-                fh.flush()
-            else:
-                time.sleep(0.1)
+        if command.running and timeout.expired():
+            command.terminate()
+            log("timeout %d # %s" % (timeout.seconds, command))
 
-        except c.fromchild.EOF:
-            c.wait()
-            break
+        return True
 
-        if not c.running:
-            break
+    out = command.read(handler)
+    if command.exitcode is not None:
+        log("exit %d # %s" % (command.exitcode, command))
 
-        if timeout.expired():
-            c.terminate()
-            print >> fh, "# TIMED OUT"
-            break
+    print >> outfh
 
-    fh.write(c.fromchild.read())
+    return command.exitcode
 
-    if c.exitcode:
-        print >> fh, "# NON-ZERO EXITCODE: %d" % c.exitcode
+def worker(jobs_todo, jobs_done, logdir, timeout):
+    fh = file(os.path.join(logdir, "%d" % os.getpid()), "w")
 
-    print >> fh
-
-    return c.exitcode
-
-def worker(jobs_todo, jobs_done, log, timeout):
     for command in iter(jobs_todo.get, 'STOP'):
-        result = run_command(command, log, timeout)
-        jobs_done.put((command, result))
+        exitcode = run_command(command, fh, timeout)
+        jobs_done.put((command, exitcode))
 
 def error(e):
     print >> sys.stderr, "error: " + str(e)
@@ -143,11 +141,14 @@ def main():
     if opt_split:
 
         for i in range(opt_split):
-            log = os.path.join(opt_split_log, "%d" % i)
-            proc = Process(target=worker, args=(jobs_todo, jobs_done, log, opt_timeout))
+            proc = Process(target=worker, args=(jobs_todo, jobs_done, opt_split_log, opt_timeout))
 
             proc.start()
             procs.append(proc)
+
+        print "initialized %d workers: %s" % (len(procs), 
+                                              " ".join([ str(proc.pid) 
+                                                         for proc in procs ]))
 
     command = args
     if len(command) == 1:
@@ -166,7 +167,7 @@ def main():
         job = join(command, args)
 
         if not opt_split:
-            run_command(job, '-', opt_timeout)
+            run_command(job, sys.stdout, opt_timeout)
         else:
             jobs_todo.put(job)
 
