@@ -6,7 +6,7 @@ Options:
 
     --timeout=SECS        How long to wait before giving up
     --split=N             How many processes to execute in parallel
-    --split-log=DIR       Path to directory where we save logs
+    --split-logs=DIR       Path to directory where we save logs
                           Required with --split
 """
 import os
@@ -18,7 +18,9 @@ import time
 import errno
 
 from command import Command, fmt_argv
-from multiprocessing import Process, Queue
+from multiprocessing import Process, Queue, Manager
+
+import random
 
 def makedirs(path):
     try:
@@ -49,38 +51,96 @@ class DatedLog:
         if self.fh != sys.stdout:
             print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
 
-def run_command(command, outfh, timeout=None):
-    log = DatedLog(outfh)
+class CommandExecutor:
+    MAGIC_STOP = '__STOP__'
 
-    command = Command(command, setpgrp=True)
-    log(str(command))
+    class Error(Exception):
+        pass
 
-    timeout = Timeout(timeout)
-    def handler(command, buf):
-        if buf:
-            outfh.write(buf)
-            outfh.flush()
+    @staticmethod
+    def _execute(command, outfh, timeout=None):
+        log = DatedLog(outfh)
 
-        if command.running and timeout.expired():
-            command.terminate()
-            log("timeout %d # %s" % (timeout.seconds, command))
+        command = Command(command, setpgrp=True)
+        log(str(command))
 
-        return True
+        timeout = Timeout(timeout)
+        def handler(command, buf):
+            if buf:
+                outfh.write(buf)
+                outfh.flush()
 
-    out = command.read(handler)
-    if command.exitcode is not None:
-        log("exit %d # %s" % (command.exitcode, command))
+            if command.running and timeout.expired():
+                command.terminate()
+                log("timeout %d # %s" % (timeout.seconds, command))
 
-    print >> outfh
+            return True
 
-    return command.exitcode
+        out = command.read(handler)
+        if command.exitcode is not None:
+            log("exit %d # %s" % (command.exitcode, command))
 
-def worker(jobs_todo, jobs_done, logdir, timeout):
-    fh = file(os.path.join(logdir, "%d" % os.getpid()), "w")
+        print >> outfh
+        return command.exitcode
 
-    for command in iter(jobs_todo.get, 'STOP'):
-        exitcode = run_command(command, fh, timeout)
-        jobs_done.put((command, exitcode))
+    def _subprocess(self):
+        fh = file(os.path.join(self.split_logs, "%d" % os.getpid()), "w")
+
+        for job in iter(self.q_todo.get, self.MAGIC_STOP):
+            result = self._execute(job, fh, self.timeout)
+            self.results.append((job, result))
+
+        fh.close()
+
+    def __init__(self, split=None, split_logs=None, timeout=None):
+        self.results = []
+        self.split = None
+
+        if (split and not split_logs) or (split_logs and not split):
+            raise self.Error("--split and --split-logs go together")
+
+        self.split = split
+        self.timeout = timeout
+
+        if not split:
+            return
+
+        self.results = Manager().list()
+
+        if split < 2:
+            raise self.Error("bad split (%d) minimum is 2" % split)
+
+        self.split_logs = split_logs
+        self.q_todo = Queue()
+
+        procs = []
+
+        for i in range(self.split):
+            proc = Process(target=self._subprocess)
+            proc.start()
+            procs.append(proc)
+
+        print "initialized %d workers: %s" % (len(procs), 
+                                              " ".join([ str(proc.pid) 
+                                                         for proc in procs ]))
+        self.procs = procs
+
+    def __call__(self, job):
+        if not self.split:
+            result = self._execute(job, sys.stdout, self.timeout)
+            self.results.append((job, result))
+        else:
+            self.q_todo.put(job)
+
+    def join(self):
+        if not self.split:
+            return
+
+        for i in range(self.split):
+            self.q_todo.put(self.MAGIC_STOP)
+
+        for proc in self.procs:
+            proc.join()
 
 def error(e):
     print >> sys.stderr, "error: " + str(e)
@@ -100,13 +160,13 @@ def main():
                                    'h', ['help', 
                                          'timeout=',
                                          'split=',
-                                         'split-log='])
+                                         'split-logs='])
     except getopt.GetoptError, e:
         usage(e)
 
     opt_timeout = None
     opt_split = None
-    opt_split_log = None
+    opt_split_logs = None
 
     for opt, val in opts:
         if opt in ('-h', '--help'):
@@ -120,40 +180,24 @@ def main():
             if opt_split < 1:
                 usage("bad --split value '%s'" % val)
 
-        if opt == '--split-log':
-            opt_split_log = val
-            if os.path.isfile(opt_split_log):
+        if opt == '--split-logs':
+            opt_split_logs = val
+            if os.path.isfile(opt_split_logs):
                 error("'%s' is a file, not a directory" % val)
 
-            makedirs(opt_split_log)
-            if not os.access(opt_split_log, os.W_OK):
-                error("not allowed to write to '%s'" % opt_split_log)
-
-    if (opt_split and not opt_split_log) or \
-       (opt_split_log and not opt_split):
-        usage("--split and --split-log go together")
-
-
-    jobs_todo = Queue()
-    jobs_done = Queue()
-
-    procs = []
-    if opt_split:
-
-        for i in range(opt_split):
-            proc = Process(target=worker, args=(jobs_todo, jobs_done, opt_split_log, opt_timeout))
-
-            proc.start()
-            procs.append(proc)
-
-        print "initialized %d workers: %s" % (len(procs), 
-                                              " ".join([ str(proc.pid) 
-                                                         for proc in procs ]))
+            makedirs(opt_split_logs)
+            if not os.access(opt_split_logs, os.W_OK):
+                error("not allowed to write to '%s'" % opt_split_logs)
 
     command = args
     if len(command) == 1:
         if len(shlex.split(command[0])) > 1:
             command = command[0]
+
+    try:
+        executor = CommandExecutor(opt_split, opt_split_logs, opt_timeout)
+    except CommandExecutor.Error, e:
+        usage(e)
 
     for line in sys.stdin.readlines():
         args = shlex.split(line)
@@ -164,19 +208,17 @@ def main():
 
             return command + args
 
-        job = join(command, args)
+        executor(join(command, args))
 
-        if not opt_split:
-            run_command(job, sys.stdout, opt_timeout)
-        else:
-            jobs_todo.put(job)
+    executor.join()
 
-    if opt_split:
-        for i in range(opt_split):
-            jobs_todo.put('STOP')
+    exitcodes = [ exitcode for command, exitcode in executor.results ]
 
-        for proc in procs:
-            proc.join()
-            
+    succeeded = exitcodes.count(0)
+    failed = len(exitcodes) - ok
+
+    print "%d commands executed (%d succeeded, %d failed)" % (len(exitcodes),
+                                                              succeeded, failed)
+
 if __name__ == "__main__":
     main()
