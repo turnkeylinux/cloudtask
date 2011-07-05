@@ -6,9 +6,15 @@ Options:
 
     --timeout=SECS        How long to wait before giving up
     --split=N             How many processes to execute in parallel
-    --split-logs=DIR       Path to directory where we save logs
+    --split-logs=DIR      Path to directory where we save logs
                           Required with --split
+
+
+    --abort-probability   Probability of simulated abort event
+    --abort-retries       How many abort retries to allow
 """
+from __future__ import with_statement
+
 import os
 import sys
 import shlex
@@ -18,9 +24,11 @@ import time
 import errno
 
 from command import Command, fmt_argv
-from multiprocessing import Process, Queue, Manager
+from multiprocessing import Process, Queue, Manager, Lock
+from multiprocessing.queues import Empty
 
 import random
+import signal
 
 def makedirs(path):
     try:
@@ -50,6 +58,18 @@ class DatedLog:
 
         if self.fh != sys.stdout:
             print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
+
+def breakpipe():
+    import sys
+    from forked import forkpipe
+    import time
+
+    pid, r, w = forkpipe()
+    if pid == 0:
+        sys.exit(1)
+        time.sleep(10)
+    else:
+        w.write("test")
 
 class CommandExecutor:
     MAGIC_STOP = '__STOP__'
@@ -88,12 +108,12 @@ class CommandExecutor:
 
         for job in iter(self.jobs.get, self.MAGIC_STOP):
             result = self._execute(job, fh, self.timeout)
-            self.results.append((job, result))
+            self.results.put((job, result))
 
         fh.close()
 
     def __init__(self, split=None, split_logs=None, timeout=None):
-        self.results = []
+        self.results = Queue()
         self.split = None
 
         if (split and not split_logs) or (split_logs and not split):
@@ -104,8 +124,6 @@ class CommandExecutor:
 
         if not split:
             return
-
-        self.results = Manager().list()
 
         if split < 2:
             raise self.Error("bad split (%d) minimum is 2" % split)
@@ -128,7 +146,7 @@ class CommandExecutor:
     def __call__(self, job):
         if not self.split:
             result = self._execute(job, sys.stdout, self.timeout)
-            self.results.append((job, result))
+            self.results.put((job, result))
         else:
             self.jobs.put(job)
 
@@ -142,6 +160,16 @@ class CommandExecutor:
         for proc in self.procs:
             proc.join()
 
+def qgetall(q):
+    vals = []
+    while True:
+        try:
+            val = q.get(False)
+            vals.append(val)
+        except Empty:
+            break
+
+    return vals
 def error(e):
     print >> sys.stderr, "error: " + str(e)
     sys.exit(1)
@@ -212,7 +240,9 @@ def main():
 
     executor.join()
 
-    exitcodes = [ exitcode for command, exitcode in executor.results ]
+    results = qgetall(executor.results)
+
+    exitcodes = [ exitcode for command, exitcode in results ]
 
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
