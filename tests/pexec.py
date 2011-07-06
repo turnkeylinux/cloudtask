@@ -6,11 +6,20 @@ Options:
 
     --timeout=SECS        How long to wait before giving up
     --split=N             How many processes to execute in parallel
-    --split-logs=DIR      Path to directory where we save logs
-                          Required with --split
+    --sessions=PATH       Path to location where sessions are stored
+                          environment: PEXEC_SESSIONS
+                          default: $HOME/.pexec/sessions/
+
+Usage:
+
+    seq 10 | pexec echo
+    seq 10 | pexec --split=3 echo
+    pexec --resume=1 --timeout=6 --split=3
+
 
 """
 import os
+from os.path import *
 import sys
 import shlex
 import getopt
@@ -21,6 +30,8 @@ import errno
 from command import Command, fmt_argv
 from multiprocessing import Process, Queue
 from multiprocessing.queues import Empty
+
+from paths import Paths
 
 def makedirs(path):
     try:
@@ -40,16 +51,30 @@ class Timeout:
             return True
         return False
 
-class DatedLog:
-    def __init__(self, fh):
-        self.fh = fh
+class Session:
+    class SessionPaths(Paths):
+        files = ['workers', 'log', 'jobs']
 
-    def __call__(self, msg):
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-        print >> self.fh, "# %s: %s" % (timestamp, msg)
+    def __init__(self, sessions_path):
+        if not exists(sessions_path):
+            makedirs(sessions_path)
 
-        if self.fh != sys.stdout:
-            print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
+        if not isdir(sessions_path):
+            raise Error("sessions path is not a directory: " + sessions_path)
+
+        session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
+                        if fname.isdigit() ]
+
+        if session_ids:
+            new_session_id = max(map(int, session_ids)) + 1
+        else:
+            new_session_id = 1
+
+        path = join(sessions_path, "%d" % new_session_id)
+        makedirs(path)
+
+        self.paths = self.SessionPaths(path)
+        self.id = new_session_id
 
 class CommandExecutor:
     """
@@ -79,57 +104,62 @@ class CommandExecutor:
         pass
 
     @staticmethod
-    def _execute(command, outfh, timeout=None):
-        log = DatedLog(outfh)
+    def _execute(command, log, timeout=None):
+        def status(msg):
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            print >> log, "# %s: %s" % (timestamp, msg)
+
+            if log != sys.stdout:
+                print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
 
         command = Command(command, setpgrp=True)
-        log(str(command))
+        status(str(command))
 
         timeout = Timeout(timeout)
         def handler(command, buf):
             if buf:
-                outfh.write(buf)
-                outfh.flush()
+                log.write(buf)
+                log.flush()
 
             if command.running and timeout.expired():
                 command.terminate()
-                log("timeout %d # %s" % (timeout.seconds, command))
+                status("timeout %d # %s" % (timeout.seconds, command))
 
             return True
 
         out = command.read(handler)
         if command.exitcode is not None:
-            log("exit %d # %s" % (command.exitcode, command))
+            status("exit %d # %s" % (command.exitcode, command))
 
-        print >> outfh
+        print >> log
         return command.exitcode
 
-    def _subprocess(self):
-        fh = file(os.path.join(self.split_logs, "%d" % os.getpid()), "w")
+    def _worker(self):
+        makedirs(self.session.paths.workers)
+        log_path = join(self.session.paths.workers, "%d" % os.getpid())
+        log = file(log_path, "w")
 
         for job in iter(self.q_jobs.get, self.MAGIC_STOP):
-            result = self._execute(job, fh, self.timeout)
+            result = self._execute(job, log, self.timeout)
             self.q_results.put((job, result))
 
-        fh.close()
+        log.close()
 
-    def __init__(self, split=None, split_logs=None, timeout=None):
+    def __init__(self, sessions_path, split=None, timeout=None):
         self.results = []
         self.split = None
-
-        if (split and not split_logs) or (split_logs and not split):
-            raise self.Error("--split and --split-logs go together")
 
         self.split = split
         self.timeout = timeout
 
+        self.session = Session(sessions_path)
+
         if not split:
+            print "session %d: serial" % self.session.id
             return
 
         if split < 2:
             raise self.Error("bad split (%d) minimum is 2" % split)
-
-        self.split_logs = split_logs
 
         self.q_jobs = Queue()
         self.q_results = Queue()
@@ -137,13 +167,15 @@ class CommandExecutor:
         procs = []
 
         for i in range(self.split):
-            proc = Process(target=self._subprocess)
+            proc = Process(target=self._worker)
             proc.start()
             procs.append(proc)
 
-        print "initialized %d workers: %s" % (len(procs), 
-                                              " ".join([ str(proc.pid) 
-                                                         for proc in procs ]))
+        print "session %d: split %d workers = %s" % (self.session.id,
+                                                     len(procs), 
+                                                     " ".join([ str(proc.pid) 
+                                                       for proc in procs ]))
+        print
         self.procs = procs
 
     def __call__(self, job):
@@ -199,18 +231,20 @@ def usage(e=None):
     sys.exit(1)
 
 def main():
+    opt_sessions = os.environ.get('PEXEC_SESSIONS', 
+                                  join(os.environ['HOME'], '.pexec', 'sessions'))
+    opt_split = None
+    opt_timeout = None
+
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
                                    'h', ['help', 
                                          'timeout=',
                                          'split=',
-                                         'split-logs='])
+                                         'sessions=',
+                                         ])
     except getopt.GetoptError, e:
         usage(e)
-
-    opt_timeout = None
-    opt_split = None
-    opt_split_logs = None
 
     for opt, val in opts:
         if opt in ('-h', '--help'):
@@ -224,14 +258,8 @@ def main():
             if opt_split < 1:
                 usage("bad --split value '%s'" % val)
 
-        if opt == '--split-logs':
-            opt_split_logs = val
-            if os.path.isfile(opt_split_logs):
-                error("'%s' is a file, not a directory" % val)
-
-            makedirs(opt_split_logs)
-            if not os.access(opt_split_logs, os.W_OK):
-                error("not allowed to write to '%s'" % opt_split_logs)
+        if opt == '--sessions':
+            opt_sessions = val
 
     command = args
     if len(command) == 1:
@@ -239,7 +267,7 @@ def main():
             command = command[0]
 
     try:
-        executor = CommandExecutor(opt_split, opt_split_logs, opt_timeout)
+        executor = CommandExecutor(opt_sessions, opt_split, opt_timeout)
     except CommandExecutor.Error, e:
         usage(e)
 
