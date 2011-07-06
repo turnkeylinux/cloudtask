@@ -66,6 +66,20 @@ class Session:
 
             return getattr(self.fh, attr)
 
+    class ManagerLog:
+        def __init__(self, path):
+            self.fh = file(path, "w")
+
+        def write(self, buf):
+            self.fh.write(buf)
+            self.fh.flush()
+
+            sys.stdout.write(buf)
+            sys.stdout.flush()
+
+        def __getattr__(self, attr):
+            return getattr(self.fh, attr)
+
     def __init__(self, sessions_path, opt_split):
         if not exists(sessions_path):
             makedirs(sessions_path)
@@ -89,9 +103,12 @@ class Session:
 
         if opt_split:
             makedirs(self.paths.workers)
-            self.log = self.WorkerLog(self.paths.workers)
+            self.wlog = self.WorkerLog(self.paths.workers)
+            self.mlog = self.ManagerLog(self.paths.log)
+                     
         else:
-            self.log = sys.stdout
+            self.wlog = self.ManagerLog(self.paths.log)
+            self.mlog = self.wlog
 
 class CommandExecutor:
     """
@@ -105,7 +122,7 @@ class CommandExecutor:
 
     Usage::
 
-        executor = CommandExecutor(2, "logs/", timeout=10)
+        executor = CommandExecutor(2, timeout=10)
         for command in commands:
             executor(command)
 
@@ -121,23 +138,23 @@ class CommandExecutor:
         pass
 
     @staticmethod
-    def _execute(command, timeout=None, log=None):
+    def _execute(command, timeout=None, wlog=None, mlog=None):
         def status(msg):
-            if log:
+            if wlog:
                 timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-                print >> log, "# %s: %s" % (timestamp, msg)
+                print >> wlog, "# %s: %s" % (timestamp, msg)
 
-            if log != sys.stdout:
-                print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
+            if mlog and mlog != wlog:
+                print >> mlog, "%d: %s" % (os.getpid(), msg)
 
         command = Command(command, setpgrp=True)
         status(str(command))
 
         timeout = Timeout(timeout)
         def handler(command, buf):
-            if buf and log:
-                log.write(buf)
-                log.flush()
+            if buf and wlog:
+                wlog.write(buf)
+                wlog.flush()
 
             if command.running and timeout.expired():
                 command.terminate()
@@ -149,23 +166,25 @@ class CommandExecutor:
         if command.exitcode is not None:
             status("exit %d # %s" % (command.exitcode, command))
 
-        if log:
-            print >> log
+        if wlog:
+            print >> wlog
         return command.exitcode
 
     def _worker(self):
         for job in iter(self.q_jobs.get, self.MAGIC_STOP):
-            result = self._execute(job, self.timeout, self.log)
+            result = self._execute(job, self.timeout, self.wlog, self.mlog)
             self.q_results.put((job, result))
 
-    def __init__(self, split=None, timeout=None, log=None):
+    def __init__(self, split=None, timeout=None, wlog=None, mlog=None):
         self.results = []
         self.split = None
 
         self.split = split
         self.timeout = timeout
 
-        self.log = log
+        self.wlog = wlog
+        self.mlog = mlog
+
         if not split:
             return
 
@@ -186,7 +205,7 @@ class CommandExecutor:
 
     def __call__(self, job):
         if not self.split:
-            result = self._execute(job, self.timeout, self.log)
+            result = self._execute(job, self.timeout, self.wlog)
             self.results.append((job, result))
         else:
             self.q_jobs.put(job)
@@ -275,17 +294,18 @@ def main():
     session = Session(opt_sessions, opt_split)
 
     try:
-        executor = CommandExecutor(opt_split, opt_timeout, session.log)
+        executor = CommandExecutor(opt_split, opt_timeout, 
+                                   session.wlog, session.mlog)
     except CommandExecutor.Error, e:
         usage(e)
 
     if opt_split:
         pids = [ proc.pid for proc in executor.procs ]
-        print "session %d: split %d workers = %s" % (session.id, len(pids), 
+        print >> session.mlog, "session %d: split %d workers = %s" % (session.id, len(pids), 
                                                      " ".join(map(str, pids)))
 
     else:
-        print "session %d: serial" % session.id
+        print >> session.mlog, "session %d: serial" % session.id
 
     for line in sys.stdin.readlines():
         args = shlex.split(line)
@@ -305,8 +325,8 @@ def main():
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
 
-    print "%d commands executed (%d succeeded, %d failed)" % (len(exitcodes),
-                                                              succeeded, failed)
+    print >> session.mlog, "%d commands executed (%d succeeded, %d failed)" % \
+                            (len(exitcodes), succeeded, failed)
 
 if __name__ == "__main__":
     main()
