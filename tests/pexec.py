@@ -9,9 +9,6 @@ Options:
     --split-logs=DIR      Path to directory where we save logs
                           Required with --split
 
-
-    --abort-probability   Probability of simulated abort event
-    --abort-retries       How many abort retries to allow
 """
 import os
 import sys
@@ -53,18 +50,6 @@ class DatedLog:
 
         if self.fh != sys.stdout:
             print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
-
-def breakpipe():
-    import sys
-    from forked import forkpipe
-    import time
-
-    pid, r, w = forkpipe()
-    if pid == 0:
-        sys.exit(1)
-        time.sleep(10)
-    else:
-        w.write("test")
 
 class CommandExecutor:
     """
