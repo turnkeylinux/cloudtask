@@ -55,7 +55,18 @@ class Session:
     class SessionPaths(Paths):
         files = ['workers', 'log', 'jobs']
 
-    def __init__(self, sessions_path):
+    class WorkerLog:
+        def __init__(self, path):
+            self.path = path
+            self.fh = None
+
+        def __getattr__(self, attr):
+            if not self.fh:
+                self.fh = file(join(self.path, str(os.getpid())), "w")
+
+            return getattr(self.fh, attr)
+
+    def __init__(self, sessions_path, opt_split):
         if not exists(sessions_path):
             makedirs(sessions_path)
 
@@ -75,6 +86,12 @@ class Session:
 
         self.paths = self.SessionPaths(path)
         self.id = new_session_id
+
+        if opt_split:
+            makedirs(self.paths.workers)
+            self.log = self.WorkerLog(self.paths.workers)
+        else:
+            self.log = sys.stdout
 
 class CommandExecutor:
     """
@@ -104,10 +121,11 @@ class CommandExecutor:
         pass
 
     @staticmethod
-    def _execute(command, log, timeout=None):
+    def _execute(command, timeout=None, log=None):
         def status(msg):
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            print >> log, "# %s: %s" % (timestamp, msg)
+            if log:
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+                print >> log, "# %s: %s" % (timestamp, msg)
 
             if log != sys.stdout:
                 print >> sys.stdout, "%d: %s" % (os.getpid(), msg)
@@ -117,7 +135,7 @@ class CommandExecutor:
 
         timeout = Timeout(timeout)
         def handler(command, buf):
-            if buf:
+            if buf and log:
                 log.write(buf)
                 log.flush()
 
@@ -131,31 +149,24 @@ class CommandExecutor:
         if command.exitcode is not None:
             status("exit %d # %s" % (command.exitcode, command))
 
-        print >> log
+        if log:
+            print >> log
         return command.exitcode
 
     def _worker(self):
-        makedirs(self.session.paths.workers)
-        log_path = join(self.session.paths.workers, "%d" % os.getpid())
-        log = file(log_path, "w")
-
         for job in iter(self.q_jobs.get, self.MAGIC_STOP):
-            result = self._execute(job, log, self.timeout)
+            result = self._execute(job, self.timeout, self.log)
             self.q_results.put((job, result))
 
-        log.close()
-
-    def __init__(self, sessions_path, split=None, timeout=None):
+    def __init__(self, split=None, timeout=None, log=None):
         self.results = []
         self.split = None
 
         self.split = split
         self.timeout = timeout
 
-        self.session = Session(sessions_path)
-
+        self.log = log
         if not split:
-            print "session %d: serial" % self.session.id
             return
 
         if split < 2:
@@ -171,16 +182,11 @@ class CommandExecutor:
             proc.start()
             procs.append(proc)
 
-        print "session %d: split %d workers = %s" % (self.session.id,
-                                                     len(procs), 
-                                                     " ".join([ str(proc.pid) 
-                                                       for proc in procs ]))
-        print
         self.procs = procs
 
     def __call__(self, job):
         if not self.split:
-            result = self._execute(job, sys.stdout, self.timeout)
+            result = self._execute(job, self.timeout, self.log)
             self.results.append((job, result))
         else:
             self.q_jobs.put(job)
@@ -266,10 +272,20 @@ def main():
         if len(shlex.split(command[0])) > 1:
             command = command[0]
 
+    session = Session(opt_sessions, opt_split)
+
     try:
-        executor = CommandExecutor(opt_sessions, opt_split, opt_timeout)
+        executor = CommandExecutor(opt_split, opt_timeout, session.log)
     except CommandExecutor.Error, e:
         usage(e)
+
+    if opt_split:
+        pids = [ proc.pid for proc in executor.procs ]
+        print "session %d: split %d workers = %s" % (session.id, len(pids), 
+                                                     " ".join(map(str, pids)))
+
+    else:
+        print "session %d: serial" % session.id
 
     for line in sys.stdin.readlines():
         args = shlex.split(line)
