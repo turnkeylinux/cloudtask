@@ -67,6 +67,27 @@ def breakpipe():
         w.write("test")
 
 class CommandExecutor:
+    """
+    Execute commands serially or in parallel.
+
+    Features:
+
+        - output from each subprocess sent in realtime to <logs>/<pid>
+        - commands may be string or tuples
+        - optional timeout
+
+    Usage::
+
+        executor = CommandExecutor(2, "logs/", timeout=10)
+        for command in commands:
+            executor(command)
+
+        executor.join()
+        for command, exitcode in executor.results:
+            print "%d: %s" % (exitcode, 
+
+    """
+
     MAGIC_STOP = '__STOP__'
 
     class Error(Exception):
