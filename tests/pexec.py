@@ -13,8 +13,6 @@ Options:
     --abort-probability   Probability of simulated abort event
     --abort-retries       How many abort retries to allow
 """
-from __future__ import with_statement
-
 import os
 import sys
 import shlex
@@ -24,11 +22,8 @@ import time
 import errno
 
 from command import Command, fmt_argv
-from multiprocessing import Process, Queue, Manager, Lock
+from multiprocessing import Process, Queue
 from multiprocessing.queues import Empty
-
-import random
-import signal
 
 def makedirs(path):
     try:
@@ -108,12 +103,12 @@ class CommandExecutor:
 
         for job in iter(self.jobs.get, self.MAGIC_STOP):
             result = self._execute(job, fh, self.timeout)
-            self.results.put((job, result))
+            self._results.put((job, result))
 
         fh.close()
 
     def __init__(self, split=None, split_logs=None, timeout=None):
-        self.results = Queue()
+        self.results = []
         self.split = None
 
         if (split and not split_logs) or (split_logs and not split):
@@ -130,6 +125,7 @@ class CommandExecutor:
 
         self.split_logs = split_logs
         self.jobs = Queue()
+        self._results = Queue()
 
         procs = []
 
@@ -146,7 +142,7 @@ class CommandExecutor:
     def __call__(self, job):
         if not self.split:
             result = self._execute(job, sys.stdout, self.timeout)
-            self.results.put((job, result))
+            self.results.append((job, result))
         else:
             self.jobs.put(job)
 
@@ -157,19 +153,32 @@ class CommandExecutor:
         for i in range(self.split):
             self.jobs.put(self.MAGIC_STOP)
 
-        for proc in self.procs:
-            proc.join()
+        def qgetall(q):
+            vals = []
+            while True:
+                try:
+                    val = q.get(False)
+                    vals.append(val)
+                except Empty:
+                    break
 
-def qgetall(q):
-    vals = []
-    while True:
-        try:
-            val = q.get(False)
-            vals.append(val)
-        except Empty:
-            break
+            return vals
 
-    return vals
+        while True:
+            running = 0
+            for proc in self.procs:
+                if proc.is_alive():
+                    running += 1
+                else:
+                    proc.join()
+
+            self.results += qgetall(self._results)
+
+            if not running:
+                break
+
+            time.sleep(0.1)
+
 def error(e):
     print >> sys.stderr, "error: " + str(e)
     sys.exit(1)
@@ -230,19 +239,17 @@ def main():
     for line in sys.stdin.readlines():
         args = shlex.split(line)
 
-        def join(command, args):
+        def command_join(command, args):
             if isinstance(command, str):
                 return command + ' ' + fmt_argv(args)
 
             return command + args
 
-        executor(join(command, args))
+        executor(command_join(command, args))
 
     executor.join()
 
-    results = qgetall(executor.results)
-
-    exitcodes = [ exitcode for command, exitcode in results ]
+    exitcodes = [ exitcode for command, exitcode in executor.results ]
 
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
