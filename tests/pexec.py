@@ -101,9 +101,9 @@ class CommandExecutor:
     def _subprocess(self):
         fh = file(os.path.join(self.split_logs, "%d" % os.getpid()), "w")
 
-        for job in iter(self.jobs.get, self.MAGIC_STOP):
+        for job in iter(self.q_jobs.get, self.MAGIC_STOP):
             result = self._execute(job, fh, self.timeout)
-            self._results.put((job, result))
+            self.q_results.put((job, result))
 
         fh.close()
 
@@ -124,8 +124,9 @@ class CommandExecutor:
             raise self.Error("bad split (%d) minimum is 2" % split)
 
         self.split_logs = split_logs
-        self.jobs = Queue()
-        self._results = Queue()
+
+        self.q_jobs = Queue()
+        self.q_results = Queue()
 
         procs = []
 
@@ -144,14 +145,14 @@ class CommandExecutor:
             result = self._execute(job, sys.stdout, self.timeout)
             self.results.append((job, result))
         else:
-            self.jobs.put(job)
+            self.q_jobs.put(job)
 
     def join(self):
         if not self.split:
             return
 
         for i in range(self.split):
-            self.jobs.put(self.MAGIC_STOP)
+            self.q_jobs.put(self.MAGIC_STOP)
 
         def qgetall(q):
             vals = []
@@ -172,7 +173,7 @@ class CommandExecutor:
                 else:
                     proc.join()
 
-            self.results += qgetall(self._results)
+            self.results += qgetall(self.q_results)
 
             if not running:
                 break
