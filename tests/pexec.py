@@ -110,6 +110,28 @@ class Session:
             self.wlog = self.ManagerLog(self.paths.log)
             self.mlog = self.wlog
 
+    def save(self, jobs, results):
+        fh = file(self.paths.jobs, "w")
+
+        pending = set(jobs) - set([ job for job, result in results ])
+
+        states = []
+        for job in pending:
+            states.append((job, "PENDING"))
+
+        for job, result in results:
+            if result is None:
+                state = "TIMEOUT"
+            else:
+                state = "EXIT=%s" % result
+
+            states.append((job, state))
+
+        for job, state in states:
+            print >> fh, "%s\t%s" % (state, job)
+
+        fh.close()
+
 class CommandExecutor:
     """
     Execute commands serially or in parallel.
@@ -147,7 +169,7 @@ class CommandExecutor:
             if mlog and mlog != wlog:
                 print >> mlog, "%d: %s" % (os.getpid(), msg)
 
-        command = Command(command, setpgrp=True)
+        command = Command(command, pty=True, setpgrp=True)
         status(str(command))
 
         timeout = Timeout(timeout)
@@ -307,6 +329,7 @@ def main():
     else:
         print >> session.mlog, "session %d: serial" % session.id
 
+    jobs = []
     for line in sys.stdin.readlines():
         args = shlex.split(line)
 
@@ -314,11 +337,15 @@ def main():
             if isinstance(command, str):
                 return command + ' ' + fmt_argv(args)
 
-            return command + args
+            return fmt_argv(command + args)
 
-        executor(command_join(command, args))
+        job = command_join(command, args)
+        jobs.append(job)
+
+        executor(job)
 
     executor.join()
+    session.save(jobs, executor.results)
 
     exitcodes = [ exitcode for command, exitcode in executor.results ]
 
