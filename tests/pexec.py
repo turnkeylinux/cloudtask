@@ -387,7 +387,10 @@ def main():
         print >> session.mlog, str(e)
         executor.killall(e.sig)
         executor.join()
-        print >> session.mlog, "session %d: terminated" % session.id
+
+        print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % (session.id,
+                                                                                     len(executor.results),
+                                                                                     len(jobs) - len(executor.results))
 
         session.save(jobs, executor.results)
         sys.exit(1)
