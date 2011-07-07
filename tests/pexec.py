@@ -26,12 +26,18 @@ import getopt
 import time
 
 import errno
+import signal
 
 from command import Command, fmt_argv
 from multiprocessing import Process, Queue
 from multiprocessing.queues import Empty
 
 from paths import Paths
+
+class SigTerminate(Exception):
+    def __init__(self, msg, sig):
+        self.sig = sig
+        Exception.__init__(self, msg)
 
 def makedirs(path):
     try:
@@ -62,18 +68,16 @@ class Session:
 
         def __getattr__(self, attr):
             if not self.fh:
-                self.fh = file(join(self.path, str(os.getpid())), "w")
+                self.fh = file(join(self.path, str(os.getpid())), "w", 1)
 
             return getattr(self.fh, attr)
 
     class ManagerLog:
         def __init__(self, path):
-            self.fh = file(path, "w")
+            self.fh = file(path, "w", 1)
 
         def write(self, buf):
             self.fh.write(buf)
-            self.fh.flush()
-
             sys.stdout.write(buf)
             sys.stdout.flush()
 
@@ -113,12 +117,7 @@ class Session:
     def save(self, jobs, results):
         fh = file(self.paths.jobs, "w")
 
-        pending = set(jobs) - set([ job for job, result in results ])
-
         states = []
-        for job in pending:
-            states.append((job, "PENDING"))
-
         for job, result in results:
             if result is None:
                 state = "TIMEOUT"
@@ -126,6 +125,11 @@ class Session:
                 state = "EXIT=%s" % result
 
             states.append((job, state))
+
+        pending = set(jobs) - set([ job for job, result in results ])
+
+        for job in pending:
+            states.append((job, "PENDING"))
 
         for job, state in states:
             print >> fh, "%s\t%s" % (state, job)
@@ -167,16 +171,15 @@ class CommandExecutor:
                 print >> wlog, "# %s: %s" % (timestamp, msg)
 
             if mlog and mlog != wlog:
-                print >> mlog, "%d: %s" % (os.getpid(), msg)
+                mlog.write("%d: %s" % (os.getpid(), msg) + "\n")
 
-        command = Command(command, pty=True, setpgrp=True)
+        command = Command(command, pty=True)
         status(str(command))
 
         timeout = Timeout(timeout)
         def handler(command, buf):
             if buf and wlog:
                 wlog.write(buf)
-                wlog.flush()
 
             if command.running and timeout.expired():
                 command.terminate()
@@ -184,18 +187,33 @@ class CommandExecutor:
 
             return True
 
-        out = command.read(handler)
+        try:
+            out = command.read(handler)
+        except SigTerminate:
+            command.terminate()
+            status("terminated # %s" % command)
+            raise
+
         if command.exitcode is not None:
             status("exit %d # %s" % (command.exitcode, command))
 
         if wlog:
             print >> wlog
+
         return command.exitcode
 
     def _worker(self):
         for job in iter(self.q_jobs.get, self.MAGIC_STOP):
-            result = self._execute(job, self.timeout, self.wlog, self.mlog)
+            try:
+                result = self._execute(job, self.timeout, self.wlog, self.mlog)
+            except SigTerminate:
+                self.q_jobs.put(job)
+                sys.exit(1)
+
             self.q_results.put((job, result))
+
+        if self.wlog:
+            self.wlog.close()
 
     def __init__(self, split=None, timeout=None, wlog=None, mlog=None):
         self.results = []
@@ -265,6 +283,16 @@ class CommandExecutor:
 
             time.sleep(0.1)
 
+    def killall(self, sig=signal.SIGTERM):
+        if not self.split:
+            return
+
+        for proc in self.procs:
+            if not proc.is_alive():
+                continue
+
+            os.kill(proc.pid, sig)
+
 def error(e):
     print >> sys.stderr, "error: " + str(e)
     sys.exit(1)
@@ -315,6 +343,13 @@ def main():
 
     session = Session(opt_sessions, opt_split)
 
+    def terminate(sig, f):
+        signal.signal(sig, signal.SIG_IGN)
+        raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
+
+    signal.signal(signal.SIGINT, terminate)
+    signal.signal(signal.SIGTERM, terminate)
+
     try:
         executor = CommandExecutor(opt_split, opt_timeout, 
                                    session.wlog, session.mlog)
@@ -329,22 +364,34 @@ def main():
     else:
         print >> session.mlog, "session %d: serial" % session.id
 
+
     jobs = []
+
     for line in sys.stdin.readlines():
         args = shlex.split(line)
 
-        def command_join(command, args):
-            if isinstance(command, str):
-                return command + ' ' + fmt_argv(args)
+        if isinstance(command, str):
+            job = command + ' ' + fmt_argv(args)
+        else:
+            job = fmt_argv(command + args)
 
-            return fmt_argv(command + args)
-
-        job = command_join(command, args)
         jobs.append(job)
 
-        executor(job)
+    try:
+        for job in jobs:
+            executor(job)
 
-    executor.join()
+        executor.join()
+
+    except SigTerminate, e:
+        print >> session.mlog, str(e)
+        executor.killall(e.sig)
+        executor.join()
+        print >> session.mlog, "session %d: terminated" % session.id
+
+        session.save(jobs, executor.results)
+        sys.exit(1)
+
     session.save(jobs, executor.results)
 
     exitcodes = [ exitcode for command, exitcode in executor.results ]
@@ -352,8 +399,8 @@ def main():
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
 
-    print >> session.mlog, "%d commands executed (%d succeeded, %d failed)" % \
-                            (len(exitcodes), succeeded, failed)
+    print >> session.mlog, "session %d: %d commands executed (%d succeeded, %d failed)" % \
+                            (session.id, len(exitcodes), succeeded, failed)
 
 if __name__ == "__main__":
     main()
