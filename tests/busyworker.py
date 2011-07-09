@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os
-import time
+import signal
 from multiprocessing import Process, Event, Semaphore
 
 from multiprocessing import Semaphore, Condition
@@ -51,20 +51,48 @@ class BetterQueue(Queue):
             self.cond_empty.release()
 
 class Worker(Process):
-    PINKSLIP = '__YOU_ARE_FIRED__'
+    class Terminated(Exception):
+        pass
 
     @classmethod
     def worker(cls, idle, q_input, q_output, func):
-        for args in iter(q_input.get, cls.PINKSLIP):
-            if not isinstance(args, tuple):
-                args = (args,)
+        def raise_exception(s, f):
+            signal.signal(s, signal.SIG_IGN)
+            raise cls.Terminated
 
-            idle.clear()
-            try:
-                retval = func(*args)
-                q_output.put(retval)
-            finally:
-                idle.set()
+        signal.signal(signal.SIGTERM, raise_exception)
+        signal.signal(signal.SIGINT, raise_exception)
+
+        class UNDEFINED:
+            pass
+
+        try:
+            while True:
+
+                retval = UNDEFINED
+                input = q_input.get()
+
+                try:
+
+                    if not isinstance(input, tuple):
+                        args = (input,)
+                    else:
+                        args = input
+
+                    idle.clear()
+                    try:
+                        retval = func(*args)
+                        q_output.put(retval)
+                    finally:
+                        idle.set()
+
+                except:
+                    if retval is UNDEFINED:
+                        q_input.put(input)
+                    raise
+
+        except cls.Terminated:
+            pass # just exit peacefully
 
     def __init__(self, q_input, q_output, func):
         self.idle = Event()
@@ -80,6 +108,13 @@ class Worker(Process):
     def wait(self, timeout=None):
         """wait until Worker is idle"""
         return self.idle.wait(timeout)
+
+    def stop(self):
+        """signal worker to stop working"""
+        if not self.is_alive():
+            return
+
+        os.kill(self.pid, signal.SIGTERM)
 
 class WorkerPool:
     def __init__(self, size, func):
@@ -109,6 +144,13 @@ class WorkerPool:
             # only reached when there was no input and no active workers
             return
 
+    def join(self):
+        self.wait()
+        for worker in self.workers:
+            worker.stop()
+            worker.join()
+
+import time
 def sleeper(seconds):
     print "%d: sleeping for %d seconds" % (os.getpid(), seconds)
     time.sleep(seconds)
@@ -131,8 +173,6 @@ def test2():
 
     for i in range(5):
         pool.input.put(3)
-
-    pool.wait()
 
     return pool
 
