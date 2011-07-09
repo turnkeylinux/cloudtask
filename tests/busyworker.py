@@ -117,9 +117,21 @@ class Worker(Process):
         os.kill(self.pid, signal.SIGTERM)
 
 class WorkerPool:
+    """
+    High-level worker pool.
+
+    1) Reads from an input queue.
+    2) result = func(*input) 
+    
+       (if there's an exception input is put back into the input queue)
+
+    3) Writes result back to the output queue.
+
+
+    """
     def __init__(self, size, func):
         input = BetterQueue()
-        output = Queue()
+        output = BetterQueue()
 
         self.workers = []
 
@@ -169,9 +181,9 @@ def test():
 
 
 def test2():
-    pool = WorkerPool(3, sleeper)
+    pool = WorkerPool(250, sleeper)
 
-    for i in range(5):
+    for i in range(500):
         pool.input.put(3)
 
     return pool
