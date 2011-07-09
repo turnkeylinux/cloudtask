@@ -38,12 +38,12 @@ class BetterQueue(Queue):
     def qsize(self):
         return self.sem_items.get_value()
 
-    def wait(self):
+    def wait(self, timeout=None):
         """Wait for all items to be read"""
         self.cond_empty.acquire()
         try:
             if self.qsize():
-                self.cond_empty.wait()
+                self.cond_empty.wait(timeout)
         finally:
             self.cond_empty.release()
 
