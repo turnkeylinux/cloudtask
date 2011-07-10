@@ -5,50 +5,21 @@ import threading
 import time
 import signal
 
-def hello1():
-    print "hello world"
-    time.sleep(1)
-    return True
-
-def hello2():
-    while True:
-        print "hello world"
-        time.sleep(1)
-        yield True
-
-def hello3():
-    for i in range(5):
-        print "hello world %d" % i
-        time.sleep(1)
-        yield True
-
-    print "done"
-    yield False
-
-class Foo:
-    def __init__(self):
-        done = threading.Event()
-        t = threading.Thread(target=hello, args=(done,))
-        t.start()
-
-        self.done = done
-        self.t = t
-
-    def stop(self):
-        self.done.set()
-        self.t.join()
-
-class ThreadLoop(threading.Thread):
+class LoopThread(threading.Thread):
     def __init__(self, func):
-        self.done = threading.Event()
-        self.func = func
+        self._done = threading.Event()
+        self._func = func
 
         threading.Thread.__init__(self)
 
     def run(self):
         while True:
-            ret = self.func()
-            if self.done.isSet() or ret is False:
+            ret = self._func()
+
+            if ret is False:
+                self._done.set()
+
+            if self._done.isSet():
                 return
 
             # special treatment for generator functions
@@ -56,22 +27,63 @@ class ThreadLoop(threading.Thread):
                 iterable = ret
 
                 for ret in iterable:
-                    if self.done.isSet() or ret is False:
+                    if ret is False:
+                        self._done.set()
+                        print "set done"
+
+                    if self._done.isSet():
                         return
 
+                self._done.set()
                 return
 
     def stop(self):
-        self.done.set()
+        self._done.set()
         self.join()
 
+    @property
+    def done(self):
+        return self._done.isSet()
+
+    def __enter__(self):
+        self.start()
+        return self
+
+    def __exit__(self, type, value, tb):
+        self.stop()
+
 def test():
-    loop = ThreadLoop(hello1)
-    loop.start()
-    try:
+    def hello1():
+        print "hello world"
+        time.sleep(1)
+        return True
+
+    def hello2():
         while True:
+            print "hello world"
+            time.sleep(1)
+            yield True
+
+    def hello3():
+        for i in range(3):
+            print "hello world %d" % i
+            time.sleep(1)
+            yield True
+
+        print "done"
+
+    with LoopThread(hello3) as loop:
+        while True:
+            if loop.done:
+                break
+
             time.sleep(1)
 
+    loop = LoopThread(hello1)
+    loop.start()
+    try:
+        for i in range(3):
+            time.sleep(1)
     finally:
         loop.stop()
 
