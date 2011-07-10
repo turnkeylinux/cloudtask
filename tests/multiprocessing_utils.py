@@ -69,85 +69,68 @@ class WaitableQueue(Queue):
         finally:
             self.cond_notempty.release()
 
-class Worker(Process):
-    class Terminated(Exception):
-        pass
-
-    @classmethod
-    def worker(cls, idle, q_input, q_output, func):
-        def raise_exception(s, f):
-            signal.signal(s, signal.SIG_IGN)
-            raise cls.Terminated
-
-        signal.signal(signal.SIGTERM, raise_exception)
-        signal.signal(signal.SIGINT, raise_exception)
-
-        class UNDEFINED:
+class Parallelize:
+    class Worker(Process):
+        class Terminated(Exception):
             pass
 
-        try:
-            while True:
+        @classmethod
+        def worker(cls, idle, q_input, q_output, func):
+            def raise_exception(s, f):
+                signal.signal(s, signal.SIG_IGN)
+                raise cls.Terminated
 
-                retval = UNDEFINED
-                input = q_input.get()
+            signal.signal(signal.SIGTERM, raise_exception)
+            signal.signal(signal.SIGINT, raise_exception)
 
-                try:
+            class UNDEFINED:
+                pass
 
-                    if not isinstance(input, tuple):
-                        args = (input,)
-                    else:
-                        args = input
+            try:
+                while True:
 
-                    idle.clear()
+                    retval = UNDEFINED
+                    input = q_input.get()
+
                     try:
-                        retval = func(*args)
-                        q_output.put(retval)
-                    finally:
-                        idle.set()
 
-                except:
-                    if retval is UNDEFINED:
-                        q_input.put(input)
-                    raise
+                        idle.clear()
+                        try:
+                            retval = func(*input)
+                            q_output.put(retval)
+                        finally:
+                            idle.set()
 
-        except cls.Terminated:
-            pass # just exit peacefully
+                    except:
+                        if retval is UNDEFINED:
+                            q_input.put(input)
+                        raise
 
-    def __init__(self, q_input, q_output, func):
-        self.idle = Event()
-        self.idle.set()
+            except cls.Terminated:
+                pass # just exit peacefully
 
-        Process.__init__(self, 
-                         target=self.worker, 
-                         args=(self.idle, q_input, q_output, func))
+        def __init__(self, q_input, q_output, func):
+            self.idle = Event()
+            self.idle.set()
 
-    def is_busy(self):
-        return not self.idle.is_set()
+            Process.__init__(self, 
+                             target=self.worker, 
+                             args=(self.idle, q_input, q_output, func))
 
-    def wait(self, timeout=None):
-        """wait until Worker is idle"""
-        return self.idle.wait(timeout)
+        def is_busy(self):
+            return not self.idle.is_set()
 
-    def stop(self):
-        """signal worker to stop working"""
-        if not self.is_alive():
-            return
+        def wait(self, timeout=None):
+            """wait until Worker is idle"""
+            return self.idle.wait(timeout)
 
-        os.kill(self.pid, signal.SIGTERM)
+        def stop(self):
+            """signal worker to stop working"""
+            if not self.is_alive():
+                return
 
-class WorkerPool:
-    """
-    High-level worker pool.
+            os.kill(self.pid, signal.SIGINT)
 
-    1) Reads from an input queue.
-    2) result = func(*input) 
-    
-       (if there's an exception input is put back into the input queue)
-
-    3) Writes result back to the output queue.
-
-
-    """
     def __init__(self, size, func):
         input = WaitableQueue()
         output = WaitableQueue()
@@ -155,10 +138,12 @@ class WorkerPool:
         self.workers = []
 
         for i in range(size):
-            worker = Worker(input, output, func)
+            worker = self.Worker(input, output, func)
             worker.start()
 
             self.workers.append(worker)
+
+        self.size = size
 
         self.input = input
         self.results = []
@@ -187,12 +172,35 @@ class WorkerPool:
             # only reached when there was no input and no active workers
             return
 
-    def join(self):
-        self.wait()
-
+    def stop(self):
         for worker in self.workers:
             worker.stop()
             worker.join()
 
         self._results_getter.stop()
 
+    def __call__(self, *args):
+        self.input.put(args)
+
+def test():
+    import time
+    def sleeper(seconds):
+        print "%d: sleeping for %d seconds" % (os.getpid(), seconds)
+        time.sleep(seconds)
+        print "%d: done sleeping" % os.getpid()
+
+        return seconds
+
+    sleeper = Parallelize(10, sleeper)
+    try:
+        for i in range(20):
+            sleeper(10)
+
+        sleeper.wait()
+    finally:
+        sleeper.stop()
+
+    print "len(pool.results) = %d" % len(sleeper.results)
+
+if __name__ == "__main__":
+    test()
