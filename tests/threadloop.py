@@ -22,29 +22,19 @@ class ThreadLoop(threading.Thread):
 
         threading.Thread.__init__(self)
 
-    def run(self):
-        while True:
-            ret = self._func()
+    def run(self, func=None):
+        if func is None:
+            func = self._func
 
-            if ret is False:
-                self._done.set()
-
+        for ret in iter(func, False):
             if self._done.isSet():
-                return
+                break
 
             # special treatment for generator functions
             if hasattr(ret, 'next'): 
-                iterable = ret
+                return self.run(ret.next)
 
-                for ret in iterable:
-                    if self._done.isSet():
-                        return
-
-                    if ret is False:
-                        break
-
-                self._done.set()
-                return
+        self._done.set()
 
     def stop(self):
         self._done.set()
