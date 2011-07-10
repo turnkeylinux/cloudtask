@@ -5,7 +5,10 @@ import threading
 import time
 import signal
 
-class LoopThread(threading.Thread):
+class ThreadLoop(threading.Thread):
+    """
+    Easily run a function in a loop inside a background thread.
+    """
     def __init__(self, func):
         """
         func can be a regular function or a generator function.
@@ -34,11 +37,11 @@ class LoopThread(threading.Thread):
                 iterable = ret
 
                 for ret in iterable:
-                    if ret is False:
-                        self._done.set()
-
                     if self._done.isSet():
                         return
+
+                    if ret is False:
+                        break
 
                 self._done.set()
                 return
@@ -78,14 +81,16 @@ def test():
 
         print "done"
 
-    with LoopThread(hello3) as loop:
+    # 'with' usage example
+    with ThreadLoop(hello3) as loop:
         while True:
             if loop.done:
                 break
 
             time.sleep(1)
 
-    loop = LoopThread(hello1)
+    # try / finally usage example
+    loop = ThreadLoop(hello1)
     loop.start()
     try:
         for i in range(3):
