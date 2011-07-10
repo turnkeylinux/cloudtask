@@ -1,4 +1,3 @@
-#!/usr/bin/python
 from __future__ import with_statement
 
 import threading
@@ -7,7 +6,7 @@ import signal
 
 class ThreadLoop(threading.Thread):
     """
-    Easily run a function in a loop inside a background thread.
+    Convenience class for looping a function inside a background thread.
     """
     def __init__(self, func):
         """
@@ -21,6 +20,7 @@ class ThreadLoop(threading.Thread):
         self._func = func
 
         threading.Thread.__init__(self)
+        self.start()
 
     def run(self, func=None):
         if func is None:
@@ -45,7 +45,6 @@ class ThreadLoop(threading.Thread):
         return self._done.isSet()
 
     def __enter__(self):
-        self.start()
         return self
 
     def __exit__(self, type, value, tb):
@@ -81,7 +80,6 @@ def test():
 
     # try / finally usage example
     loop = ThreadLoop(hello1)
-    loop.start()
     try:
         for i in range(3):
             time.sleep(1)
