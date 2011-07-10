@@ -7,6 +7,13 @@ import signal
 
 class LoopThread(threading.Thread):
     def __init__(self, func):
+        """
+        func can be a regular function or a generator function.
+
+        Regular functions loop forever until they return False.
+
+        Generator functions iterate until they yield False.
+        """
         self._done = threading.Event()
         self._func = func
 
@@ -29,7 +36,6 @@ class LoopThread(threading.Thread):
                 for ret in iterable:
                     if ret is False:
                         self._done.set()
-                        print "set done"
 
                     if self._done.isSet():
                         return
