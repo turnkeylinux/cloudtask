@@ -40,6 +40,8 @@ class _ThreadLoop(threading.Thread):
         self._done.set()
         while True:
             self.join(1)
+            self._done.set()
+
             if not self.isAlive():
                 return
 
