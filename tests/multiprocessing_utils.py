@@ -1,4 +1,3 @@
-import os
 import signal
 
 import time
@@ -8,6 +7,21 @@ from multiprocessing import Semaphore, Condition, Value
 from multiprocessing.queues import Queue, Empty
 
 from threadloop import ThreadLoop
+
+class QueueVacuum(ThreadLoop):
+    def __init__(self, q, l):
+        def callback():
+            q.wait_notempty(0.1)
+
+            while True:
+                try:
+                    val = q.get(False)
+                    l.append(val)
+
+                except Empty:
+                    break
+
+        ThreadLoop.__init__(self, callback)
 
 class WaitableQueue(Queue):
     """Queue that uses a semaphore to reliably count items in it"""
@@ -98,6 +112,7 @@ class Parallelize:
                     except:
                         if retval is UNDEFINED:
                             q_input.put(input)
+
                         raise
 
                     finally:
@@ -146,19 +161,7 @@ class Parallelize:
 
         self.input = input
         self.results = []
-
-        def get_results():
-            output.wait_notempty(0.1)
-
-            while True:
-                try:
-                    result = output.get(False)
-                    self.results.append(result)
-
-                except Empty:
-                    break
-
-        self._results_getter = ThreadLoop(get_results)
+        self._results_vacuum = QueueVacuum(output, self.results)
 
     def wait(self):
         """wait for all input to be processed"""
@@ -190,13 +193,22 @@ class Parallelize:
         for worker in self.workers:
             worker.stop()
 
-        for worker in self.workers:
-            worker.join(timeout=1)
-            if worker.is_alive():
-                worker.terminate()
-                worker.join()
+        aborted = []
+        inputs_vacuum = QueueVacuum(self.input, aborted)
 
-        self._results_getter.stop()
+        try:
+            for worker in self.workers:
+                worker.join(timeout=1)
+                if worker.is_alive():
+                    worker.terminate()
+                    worker.join()
+
+        finally:
+            time.sleep(0.1)
+            inputs_vacuum.stop()
+
+        self._results_vacuum.stop()
+        return aborted
 
     def __call__(self, *args):
         self.input.put(args)
@@ -204,19 +216,29 @@ class Parallelize:
 def test():
     import time
     def sleeper(seconds):
-        print os.getpid()
+        time.sleep(0.1)
         return seconds
 
     sleeper = Parallelize(250, sleeper)
+    print "Allocated children"
+
     try:
-        for i in range(100000):
+        for i in range(200000):
             sleeper(1)
+
+        print "Queued parallelized invocations"
 
         sleeper.wait()
     finally:
-        sleeper.stop()
+        aborted = sleeper.stop()
+        if aborted:
+            print "len(aborted) = %d" % len(aborted)
+            print "len(aborted) + len(results) = %d" % (len(aborted) + len(sleeper.results))
 
-    print "len(pool.results) = %d" % len(sleeper.results)
+        print "len(pool.results) = %d" % len(sleeper.results)
+
+        import threading
+        print "active threads: " + `threading.activeCount()`
 
 if __name__ == "__main__":
     test()
