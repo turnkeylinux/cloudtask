@@ -217,7 +217,7 @@ class Parallelize:
 def test():
     import time
     def sleeper(seconds):
-        time.sleep(0.1)
+        time.sleep(seconds)
         return seconds
 
     sleeper = Parallelize(250, sleeper)
@@ -230,6 +230,9 @@ def test():
         print "Queued parallelized invocations"
 
         sleeper.wait()
+
+        print "Finished waiting"
+
     finally:
         aborted = sleeper.stop()
         if aborted:
@@ -237,9 +240,6 @@ def test():
             print "len(aborted) + len(results) = %d" % (len(aborted) + len(sleeper.results))
 
         print "len(pool.results) = %d" % len(sleeper.results)
-
-        import threading
-        print "active threads: " + `threading.activeCount()`
 
 if __name__ == "__main__":
     test()
