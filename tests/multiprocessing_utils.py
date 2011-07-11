@@ -188,6 +188,8 @@ class Parallelize:
     def stop(self):
         for worker in self.workers:
             worker.stop()
+
+        for worker in self.workers:
             worker.join()
 
         self._results_getter.stop()
@@ -198,12 +200,12 @@ class Parallelize:
 def test():
     import time
     def sleeper(seconds):
-        print os.getpid()
         return seconds
 
-    sleeper = Parallelize(1, sleeper)
+    sleeper = Parallelize(100, sleeper)
     try:
-        sleeper(1)
+        for i in range(1000):
+            sleeper(1)
         sleeper.wait()
     finally:
         sleeper.stop()
