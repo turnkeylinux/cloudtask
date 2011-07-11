@@ -180,6 +180,7 @@ class Parallelize:
                 worker.wait()
                 continue
 
+            # give puts to the input Queue a chance to make it through
             time.sleep(0.1)
 
             # workers may have written to the input Queue
