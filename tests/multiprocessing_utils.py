@@ -11,25 +11,15 @@ from threadloop import ThreadLoop
 class WaitableQueue(Queue):
     """Queue that uses a semaphore to reliably count items in it"""
     def __init__(self, maxsize=0):
-        self.sem_items = Semaphore(0)
-
         self.cond_empty = Condition()
         self.cond_notempty = Condition()
 
         Queue.__init__(self, maxsize)
 
-    def __getstate__(self):
-        return Queue.__getstate__(self) + (self.sem_items, self.cond_empty, self.cond_notempty)
-
-    def __setstate__(self, state):
-        Queue.__setstate__(self, state[:-2])
-        self.sem_items, self.cond_empty, self.cond_notempty = state[-2:]
-
     def put(self, obj, block=True, timeout=None):
         Queue.put(self, obj, block, timeout)
-        self.sem_items.release()
 
-        if self.sem_items.get_value() != 0:
+        if self.qsize() != 0:
             self.cond_notempty.acquire()
             try:
                 self.cond_notempty.notify_all()
@@ -38,8 +28,7 @@ class WaitableQueue(Queue):
 
     def get(self, block=True, timeout=None):
         ret = Queue.get(self, block, timeout)
-        self.sem_items.acquire()
-        if self.sem_items.get_value() == 0:
+        if self.qsize() == 0:
             self.cond_empty.acquire()
             try:
                 self.cond_empty.notify_all()
@@ -47,9 +36,6 @@ class WaitableQueue(Queue):
                 self.cond_empty.release()
 
         return ret
-
-    def qsize(self):
-        return self.sem_items.get_value()
 
     def wait_empty(self, timeout=None):
         """Wait for all items to be got"""
@@ -75,7 +61,7 @@ class Parallelize:
             pass
 
         @classmethod
-        def worker(cls, idle, q_input, q_output, func):
+        def worker(cls, done, idle, q_input, q_output, func):
             def raise_exception(s, f):
                 signal.signal(s, signal.SIG_IGN)
                 raise cls.Terminated
@@ -88,34 +74,40 @@ class Parallelize:
 
             try:
                 while True:
+                    if done.is_set():
+                        return
 
                     retval = UNDEFINED
-                    input = q_input.get()
+                    try:
+                        input = q_input.get(timeout=0.1)
+                    except Empty:
+                        continue
+
+                    idle.clear()
 
                     try:
-
-                        idle.clear()
-                        try:
-                            retval = func(*input)
-                            q_output.put(retval)
-                        finally:
-                            idle.set()
-
+                        retval = func(*input)
+                        q_output.put(retval)
                     except:
                         if retval is UNDEFINED:
                             q_input.put(input)
                         raise
+
+                    finally:
+                        idle.set()
 
             except cls.Terminated:
                 pass # just exit peacefully
 
         def __init__(self, q_input, q_output, func):
             self.idle = Event()
+            self.done = Event()
+
             self.idle.set()
 
             Process.__init__(self, 
                              target=self.worker, 
-                             args=(self.idle, q_input, q_output, func))
+                             args=(self.done, self.idle, q_input, q_output, func))
 
         def is_busy(self):
             return not self.idle.is_set()
@@ -125,11 +117,11 @@ class Parallelize:
             return self.idle.wait(timeout)
 
         def stop(self):
-            """signal worker to stop working"""
+            """let worker finish what it was doing and join"""
             if not self.is_alive():
                 return
 
-            os.kill(self.pid, signal.SIGINT)
+            self.done.set()
 
     def __init__(self, size, func):
         input = WaitableQueue()
@@ -185,17 +177,13 @@ class Parallelize:
 def test():
     import time
     def sleeper(seconds):
-        print "%d: sleeping for %d seconds" % (os.getpid(), seconds)
+        print os.getpid()
         time.sleep(seconds)
-        print "%d: done sleeping" % os.getpid()
-
         return seconds
 
-    sleeper = Parallelize(10, sleeper)
+    sleeper = Parallelize(1, sleeper)
     try:
-        for i in range(20):
-            sleeper(10)
-
+        sleeper(1)
         sleeper.wait()
     finally:
         sleeper.stop()
