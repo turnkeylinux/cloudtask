@@ -38,7 +38,10 @@ class ThreadLoop(threading.Thread):
 
     def stop(self):
         self._done.set()
-        self.join()
+        while True:
+            self.join(1)
+            if not self.isAlive():
+                return
 
     @property
     def done(self):
