@@ -224,11 +224,10 @@ def test():
     print "Allocated children"
 
     try:
-        for i in range(200000):
+        for i in range(2000):
             sleeper(1)
 
-        print "Queued parallelized invocations"
-
+        print "Queued parallelized invocations. Ctrl-C to abort!"
         sleeper.wait()
 
         print "Finished waiting"
