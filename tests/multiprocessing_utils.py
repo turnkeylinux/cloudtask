@@ -154,6 +154,7 @@ class Parallelize:
                 try:
                     result = output.get(False)
                     self.results.append(result)
+
                 except Empty:
                     break
 
@@ -167,7 +168,7 @@ class Parallelize:
                     return worker
 
         while True:
-            self.input.wait_empty()
+            self.input.wait_empty(0.1)
 
             saved_put_counter = self.input.put_counter
 
@@ -176,16 +177,17 @@ class Parallelize:
                 worker.wait()
                 continue
 
+            time.sleep(0.1)
+
             # workers may have written to the input Queue
             if self.input.put_counter != saved_put_counter:
                 continue
-
-            time.sleep(0.1)
 
             # only reached when there was no input and no active workers
             return
 
     def stop(self):
+
         for worker in self.workers:
             worker.stop()
 
@@ -200,11 +202,13 @@ class Parallelize:
 def test():
     import time
     def sleeper(seconds):
+        print os.getpid()
+        time.sleep(seconds)
         return seconds
 
     sleeper = Parallelize(100, sleeper)
     try:
-        for i in range(1000):
+        for i in range(10000):
             sleeper(1)
         sleeper.wait()
     finally:
