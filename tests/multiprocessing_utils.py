@@ -1,9 +1,10 @@
 import os
 import signal
 
+import time
 from multiprocessing import Process, Event, Semaphore
 
-from multiprocessing import Semaphore, Condition
+from multiprocessing import Semaphore, Condition, Value
 from multiprocessing.queues import Queue, Empty
 
 from threadloop import ThreadLoop
@@ -13,11 +14,13 @@ class WaitableQueue(Queue):
     def __init__(self, maxsize=0):
         self.cond_empty = Condition()
         self.cond_notempty = Condition()
+        self._put_counter = Value('i', 0)
 
         Queue.__init__(self, maxsize)
 
     def put(self, obj, block=True, timeout=None):
         Queue.put(self, obj, block, timeout)
+        self._put_counter.value += 1
 
         if self.qsize() != 0:
             self.cond_notempty.acquire()
@@ -25,6 +28,10 @@ class WaitableQueue(Queue):
                 self.cond_notempty.notify_all()
             finally:
                 self.cond_notempty.release()
+
+    @property
+    def put_counter(self):
+        return self._put_counter.value
 
     def get(self, block=True, timeout=None):
         ret = Queue.get(self, block, timeout)
@@ -110,7 +117,7 @@ class Parallelize:
                              args=(self.done, self.idle, q_input, q_output, func))
 
         def is_busy(self):
-            return not self.idle.is_set()
+            return self.is_alive() and not self.idle.is_set()
 
         def wait(self, timeout=None):
             """wait until Worker is idle"""
@@ -154,12 +161,26 @@ class Parallelize:
 
     def wait(self):
         """wait for all input to be processed"""
-        while True:
-            self.input.wait_empty()
+        def find_busy_worker():
             for worker in self.workers:
                 if worker.is_busy():
-                    worker.wait()
-                    continue # worker may put stuff into the input
+                    return worker
+
+        while True:
+            self.input.wait_empty()
+
+            saved_put_counter = self.input.put_counter
+
+            worker = find_busy_worker()
+            if worker:
+                worker.wait()
+                continue
+
+            # workers may have written to the input Queue
+            if self.input.put_counter != saved_put_counter:
+                continue
+
+            time.sleep(0.1)
 
             # only reached when there was no input and no active workers
             return
@@ -178,7 +199,6 @@ def test():
     import time
     def sleeper(seconds):
         print os.getpid()
-        time.sleep(seconds)
         return seconds
 
     sleeper = Parallelize(1, sleeper)
