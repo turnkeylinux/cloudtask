@@ -4,7 +4,7 @@ import threading
 import time
 import signal
 
-class ThreadLoop(threading.Thread):
+class _ThreadLoop(threading.Thread):
     """
     Convenience class for looping a function inside a background thread.
     """
@@ -47,31 +47,64 @@ class ThreadLoop(threading.Thread):
     def done(self):
         return self._done.isSet()
 
+class ThreadLoop(object):
+    def __init__(self, func):
+        self.thread = _ThreadLoop(func)
+
+    def __del__(self):
+        self.thread.stop()
+
     def __enter__(self):
         return self
 
     def __exit__(self, type, value, tb):
-        self.stop()
+        self.thread.stop()
+
+    def __getattr__(self, attr):
+        return getattr(self.thread, attr)
 
 def test():
     def hello1():
-        print "hello world"
+        print "hello1"
         time.sleep(1)
         return True
 
     def hello2():
         while True:
-            print "hello world"
+            print "hello2"
             time.sleep(1)
             yield True
 
     def hello3():
         for i in range(3):
-            print "hello world %d" % i
+            print "hello3 %d" % i
             time.sleep(1)
             yield True
 
         print "done"
+
+    # not Ctrl-C safe (will deadlock)
+    print "NOT CTRL-C SAFE:"
+    loop = ThreadLoop(hello1)
+    time.sleep(3)
+    loop = None
+
+    # this is Ctrl-C safe
+    print
+    print "CTRL-C SAFE:"
+    loop = ThreadLoop(hello1)
+    try:
+        time.sleep(3)
+    finally:
+        loop = None
+
+    # try / finally usage example
+    loop = ThreadLoop(hello2)
+    try:
+        for i in range(3):
+            time.sleep(1)
+    finally:
+        loop.stop()
 
     # 'with' usage example
     with ThreadLoop(hello3) as loop:
@@ -80,14 +113,6 @@ def test():
                 break
 
             time.sleep(1)
-
-    # try / finally usage example
-    loop = ThreadLoop(hello1)
-    try:
-        for i in range(3):
-            time.sleep(1)
-    finally:
-        loop.stop()
 
 if __name__ == "__main__":
     test()
