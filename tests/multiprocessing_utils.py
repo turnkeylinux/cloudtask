@@ -191,6 +191,9 @@ class Parallelize:
             return
 
     def stop(self):
+        if not self.workers:
+            return
+
         for worker in self.workers:
             worker.stop()
 
@@ -204,6 +207,7 @@ class Parallelize:
                     worker.terminate()
                     worker.join()
 
+            self.workers = []
         finally:
             time.sleep(0.1)
             inputs_vacuum.stop()
@@ -213,6 +217,9 @@ class Parallelize:
 
     def __call__(self, *args):
         self.q_input.put(args)
+
+    def __del__(self):
+        self.stop()
 
 def test():
     import time
