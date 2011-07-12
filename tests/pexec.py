@@ -141,7 +141,6 @@ class CommandExecutor:
 
     Features:
 
-        - output from each subprocess sent in realtime to <logs>/<pid>
         - commands may be string or tuples
         - optional timeout
 
@@ -153,7 +152,7 @@ class CommandExecutor:
 
         executor.join()
         for command, exitcode in executor.results:
-            print "%d: %s" % (exitcode, 
+            print "%d: %s" % (exitcode, command)
 
     """
 
