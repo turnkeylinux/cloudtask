@@ -10,11 +10,13 @@ Options:
                           environment: PEXEC_SESSIONS
                           default: $HOME/.pexec/sessions/
 
+    --resume=ID           Resume session
+
 Usage:
 
     seq 10 | pexec echo
     seq 10 | pexec --split=3 echo
-    pexec --resume=1 --timeout=6 --split=3
+    pexec --timeout=6 --split=3 --resume=1
 
 
 """
@@ -47,6 +49,8 @@ def makedirs(path):
             raise
 
 class Session:
+    class Error(Exception):
+        pass
     class SessionPaths(Paths):
         files = ['workers', 'log', 'jobs']
 
@@ -57,13 +61,13 @@ class Session:
 
         def __getattr__(self, attr):
             if not self.fh:
-                self.fh = file(join(self.path, str(os.getpid())), "w", 1)
+                self.fh = file(join(self.path, str(os.getpid())), "a", 1)
 
             return getattr(self.fh, attr)
 
     class ManagerLog:
         def __init__(self, path):
-            self.fh = file(path, "w", 1)
+            self.fh = file(path, "a", 1)
 
         def write(self, buf):
             self.fh.write(buf)
@@ -73,26 +77,76 @@ class Session:
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
 
-    def __init__(self, sessions_path, opt_split):
+    class Jobs:
+        def __init__(self, path):
+            self.pending = []
+            self.finished = []
+            self.path = path
+
+            if not exists(path):
+                return
+
+            for line in file(path).readlines():
+                line = line.strip()
+                state, command = line.split('\t', 1)
+                if state == "PENDING":
+                    self.pending.append(command)
+                else:
+                    self.finished.append((command, state))
+
+        def update(self, jobs=[], results=[]):
+            for job, result in results:
+                if result is None:
+                    state = "TIMEOUT"
+                else:
+                    state = "EXIT=%s" % result
+
+                self.finished.append((job, state))
+
+            states = self.finished[:]
+
+            self.pending = list((set(self.pending) | set(jobs)) - \
+                                 set([ job for job, result in results ]))
+
+            for job in self.pending:
+                states.append((job, "PENDING"))
+
+            fh = file(self.path, "w")
+            for job, state in states:
+                print >> fh, "%s\t%s" % (state, job)
+            fh.close()
+
+    def __init__(self, sessions_path, opt_split, id=None):
         if not exists(sessions_path):
             makedirs(sessions_path)
 
         if not isdir(sessions_path):
-            raise Error("sessions path is not a directory: " + sessions_path)
+            raise self.Error("sessions path is not a directory: " + sessions_path)
 
         session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
                         if fname.isdigit() ]
 
-        if session_ids:
-            new_session_id = max(map(int, session_ids)) + 1
+        new_session = False if id else True
+        if new_session:
+            if session_ids:
+                new_session_id = max(map(int, session_ids)) + 1
+            else:
+                new_session_id = 1
+
+            self.id = new_session_id
         else:
-            new_session_id = 1
+            if id not in session_ids:
+                raise self.Error("no such session '%s'" % `id`)
 
-        path = join(sessions_path, "%d" % new_session_id)
-        makedirs(path)
+            self.id = id
 
+        path = join(sessions_path, "%d" % self.id)
         self.paths = self.SessionPaths(path)
-        self.id = new_session_id
+
+        if new_session:
+            makedirs(path)
+
+        self.jobs = self.Jobs(self.paths.jobs)
 
         if opt_split:
             makedirs(self.paths.workers)
@@ -108,28 +162,6 @@ class Session:
     @property
     def elapsed(self):
         return time.time() - self.started 
-
-    def save(self, jobs, results):
-        fh = file(self.paths.jobs, "w")
-
-        states = []
-        for job, result in results:
-            if result is None:
-                state = "TIMEOUT"
-            else:
-                state = "EXIT=%s" % result
-
-            states.append((job, state))
-
-        pending = set(jobs) - set([ job for job, result in results ])
-
-        for job in pending:
-            states.append((job, "PENDING"))
-
-        for job, state in states:
-            print >> fh, "%s\t%s" % (state, job)
-
-        fh.close()
 
 class Timeout:
     def __init__(self, seconds=None):
@@ -271,6 +303,7 @@ def usage(e=None):
         print >> sys.stderr, "error: " + str(e)
 
     print >> sys.stderr, "syntax: %s [ -opts ] [ command ]" % sys.argv[0]
+    print >> sys.stderr, "syntax: %s [ -opts ] --resume=SESSION_ID" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
@@ -279,6 +312,7 @@ def main():
                                   join(os.environ['HOME'], '.pexec', 'sessions'))
     opt_split = None
     opt_timeout = None
+    opt_resume = None
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
@@ -286,6 +320,7 @@ def main():
                                          'timeout=',
                                          'split=',
                                          'sessions=',
+                                         'resume=',
                                          ])
     except getopt.GetoptError, e:
         usage(e)
@@ -305,12 +340,43 @@ def main():
         if opt == '--sessions':
             opt_sessions = val
 
+        if opt == '--resume':
+            try:
+                opt_resume = int(val)
+            except ValueError:
+                usage("--resume session id must be an integer")
+
+    
     command = args
     if len(command) == 1:
         if len(shlex.split(command[0])) > 1:
             command = command[0]
 
-    session = Session(opt_sessions, opt_split)
+    if opt_resume:
+        if command:
+            usage("--resume incompatible with a command")
+
+        session = Session(opt_sessions, opt_split, id=opt_resume)
+        jobs = session.jobs.pending
+
+        if not jobs:
+            print "session %d finished" % session.id
+            sys.exit(0)
+        else:
+            print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
+
+    else:
+        session = Session(opt_sessions, opt_split)
+        jobs = []
+        for line in sys.stdin.readlines():
+            args = shlex.split(line)
+
+            if isinstance(command, str):
+                job = command + ' ' + fmt_argv(args)
+            else:
+                job = fmt_argv(command + args)
+
+            jobs.append(job)
 
     try:
         executor = CommandExecutor(opt_split, opt_timeout, 
@@ -329,18 +395,6 @@ def main():
                                                                os.getpid())
 
 
-    jobs = []
-
-    for line in sys.stdin.readlines():
-        args = shlex.split(line)
-
-        if isinstance(command, str):
-            job = command + ' ' + fmt_argv(args)
-        else:
-            job = fmt_argv(command + args)
-
-        jobs.append(job)
-
     def terminate(sig, f):
         signal.signal(sig, signal.SIG_IGN)
         raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
@@ -358,14 +412,15 @@ def main():
         print >> session.mlog, str(e)
         executor.stop()
 
-        print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % (session.id,
-                                                                                     len(executor.results),
-                                                                                     len(jobs) - len(executor.results))
+        session.jobs.update(jobs, executor.results)
+        print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
+                                (session.id, 
+                                 len(session.jobs.finished), 
+                                 len(session.jobs.pending))
 
-        session.save(jobs, executor.results)
         sys.exit(1)
 
-    session.save(jobs, executor.results)
+    session.jobs.update(jobs, executor.results)
 
     exitcodes = [ exitcode for command, exitcode in executor.results ]
 
