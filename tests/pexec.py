@@ -314,13 +314,13 @@ def main():
 
     if opt_split:
         pids = [ worker.pid for worker in executor._execute.workers ]
-        print >> session.mlog, "session %d: pid %d, split %d workers = %s" % \
-                                (os.getpid(), session.id, len(pids), 
+        print >> session.mlog, "session %d (pid %d): split %d workers = %s" % \
+                                (session.id, os.getpid(), len(pids), 
                                  " ".join(map(str, pids)))
 
     else:
-        print >> session.mlog, "session %d: pid %d, serial" % (os.getpid(),
-                                                               session.id)
+        print >> session.mlog, "session %d (pid %d), serial" % (session.id, 
+                                                               os.getpid())
 
 
     jobs = []
