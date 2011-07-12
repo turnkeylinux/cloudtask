@@ -146,22 +146,22 @@ class Parallelize:
             self.done.set()
 
     def __init__(self, size, func):
-        input = WaitableQueue()
-        output = WaitableQueue()
+        q_input = WaitableQueue()
+        q_output = WaitableQueue()
 
         self.workers = []
 
         for i in range(size):
-            worker = self.Worker(input, output, func)
+            worker = self.Worker(q_input, q_output, func)
             worker.start()
 
             self.workers.append(worker)
 
         self.size = size
 
-        self.input = input
+        self.q_input = q_input
         self.results = []
-        self._results_vacuum = QueueVacuum(output, self.results)
+        self._results_vacuum = QueueVacuum(q_output, self.results)
 
     def wait(self):
         """wait for all input to be processed"""
@@ -171,9 +171,9 @@ class Parallelize:
                     return worker
 
         while True:
-            self.input.wait_empty(0.1)
+            self.q_input.wait_empty(0.1)
 
-            saved_put_counter = self.input.put_counter
+            saved_put_counter = self.q_input.put_counter
 
             worker = find_busy_worker()
             if worker:
@@ -184,7 +184,7 @@ class Parallelize:
             time.sleep(0.1)
 
             # workers may have written to the input Queue
-            if self.input.put_counter != saved_put_counter:
+            if self.q_input.put_counter != saved_put_counter:
                 continue
 
             # only reached when there was no input and no active workers
@@ -195,7 +195,7 @@ class Parallelize:
             worker.stop()
 
         aborted = []
-        inputs_vacuum = QueueVacuum(self.input, aborted)
+        inputs_vacuum = QueueVacuum(self.q_input, aborted)
 
         try:
             for worker in self.workers:
@@ -212,7 +212,7 @@ class Parallelize:
         return aborted
 
     def __call__(self, *args):
-        self.input.put(args)
+        self.q_input.put(args)
 
 def test():
     import time
