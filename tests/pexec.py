@@ -103,6 +103,12 @@ class Session:
             self.wlog = self.ManagerLog(self.paths.log)
             self.mlog = self.wlog
 
+        self.started = time.time()
+
+    @property
+    def elapsed(self):
+        return time.time() - self.started 
+
     def save(self, jobs, results):
         fh = file(self.paths.jobs, "w")
 
@@ -366,8 +372,9 @@ def main():
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
 
-    print >> session.mlog, "session %d: %d commands executed (%d succeeded, %d failed)" % \
-                            (session.id, len(exitcodes), succeeded, failed)
+    print >> session.mlog, "session %d: %d commands in %d seconds (%d succeeded, %d failed)" % \
+                            (session.id, len(exitcodes), session.elapsed, succeeded, failed)
+
 
 if __name__ == "__main__":
     main()
