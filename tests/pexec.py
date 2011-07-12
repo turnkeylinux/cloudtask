@@ -31,6 +31,7 @@ import signal
 from command import Command, fmt_argv
 from paths import Paths
 
+from multiprocessing import Event
 from multiprocessing_utils import Parallelize
 
 class SigTerminate(Exception):
@@ -160,10 +161,13 @@ class CommandExecutor:
         pass
 
     def _execute(self, command):
+        if self.event_stop:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         timeout = self.timeout
         wlog = self.wlog
         mlog = self.mlog
-
+        
         def status(msg):
             if wlog:
                 timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
@@ -171,6 +175,15 @@ class CommandExecutor:
 
             if mlog and mlog != wlog:
                 mlog.write("%d: %s" % (os.getpid(), msg) + "\n")
+
+        def handle_stop():
+            if not self.event_stop:
+                return
+
+            if self.event_stop.is_set():
+                raise Parallelize.Worker.Terminated
+
+        handle_stop()
 
         command = Command(command, pty=True)
         status(str(command))
@@ -184,6 +197,7 @@ class CommandExecutor:
                 command.terminate()
                 status("timeout %d # %s" % (timeout.seconds, command))
 
+            handle_stop()
             return True
 
         try:
@@ -212,12 +226,15 @@ class CommandExecutor:
         self.wlog = wlog
         self.mlog = mlog
 
+        self.event_stop = None
+
         if not split:
             return
 
         if split < 2:
             raise self.Error("bad split (%d) minimum is 2" % split)
 
+        self.event_stop = Event()
         self._execute = Parallelize(self.split, self._execute)
         self.results = self._execute.results
 
@@ -225,6 +242,14 @@ class CommandExecutor:
         result = self._execute(job)
         if not self.split:
             self.results.append(result)
+
+    def stop(self):
+        if not self.split:
+            return
+
+        self.event_stop.set()
+        time.sleep(0.1)
+        self._execute.stop()
 
     def join(self):
         if self.split:
@@ -289,11 +314,13 @@ def main():
 
     if opt_split:
         pids = [ worker.pid for worker in executor._execute.workers ]
-        print >> session.mlog, "session %d: split %d workers = %s" % (session.id, len(pids), 
-                                                     " ".join(map(str, pids)))
+        print >> session.mlog, "session %d: pid %d, split %d workers = %s" % \
+                                (os.getpid(), session.id, len(pids), 
+                                 " ".join(map(str, pids)))
 
     else:
-        print >> session.mlog, "session %d: serial" % session.id
+        print >> session.mlog, "session %d: pid %d, serial" % (os.getpid(),
+                                                               session.id)
 
 
     jobs = []
@@ -323,7 +350,7 @@ def main():
 
     except SigTerminate, e:
         print >> session.mlog, str(e)
-        executor.join()
+        executor.stop()
 
         print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % (session.id,
                                                                                      len(executor.results),
