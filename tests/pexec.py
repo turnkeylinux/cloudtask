@@ -29,10 +29,9 @@ import errno
 import signal
 
 from command import Command, fmt_argv
-from multiprocessing import Process, Queue
-from multiprocessing.queues import Empty
-
 from paths import Paths
+
+from multiprocessing_utils import Parallelize
 
 class SigTerminate(Exception):
     def __init__(self, msg, sig):
@@ -45,17 +44,6 @@ def makedirs(path):
     except OSError, e:
         if e.errno != errno.EEXIST:
             raise
-
-class Timeout:
-    def __init__(self, seconds=None):
-        """If seconds is None, timeout never expires"""
-        self.seconds = seconds
-        self.started = time.time()
-
-    def expired(self):
-        if self.seconds and time.time() - self.started > self.seconds:
-            return True
-        return False
 
 class Session:
     class SessionPaths(Paths):
@@ -136,6 +124,17 @@ class Session:
 
         fh.close()
 
+class Timeout:
+    def __init__(self, seconds=None):
+        """If seconds is None, timeout never expires"""
+        self.seconds = seconds
+        self.started = time.time()
+
+    def expired(self):
+        if self.seconds and time.time() - self.started > self.seconds:
+            return True
+        return False
+
 class CommandExecutor:
     """
     Execute commands serially or in parallel.
@@ -158,13 +157,14 @@ class CommandExecutor:
 
     """
 
-    MAGIC_STOP = '__STOP__'
-
     class Error(Exception):
         pass
 
-    @staticmethod
-    def _execute(command, timeout=None, wlog=None, mlog=None):
+    def _execute(self, command):
+        timeout = self.timeout
+        wlog = self.wlog
+        mlog = self.mlog
+
         def status(msg):
             if wlog:
                 timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
@@ -189,7 +189,9 @@ class CommandExecutor:
 
         try:
             out = command.read(handler)
-        except SigTerminate:
+
+        # SigTerminate raised in serial mode, the other in Parallelized mode
+        except (SigTerminate, Parallelize.Worker.Terminated):
             command.terminate()
             status("terminated # %s" % command)
             raise
@@ -200,26 +202,12 @@ class CommandExecutor:
         if wlog:
             print >> wlog
 
-        return command.exitcode
-
-    def _worker(self):
-        for job in iter(self.q_jobs.get, self.MAGIC_STOP):
-            try:
-                result = self._execute(job, self.timeout, self.wlog, self.mlog)
-            except SigTerminate:
-                self.q_jobs.put(job)
-                sys.exit(1)
-
-            self.q_results.put((job, result))
-
-        if self.wlog:
-            self.wlog.close()
+        return (str(command), command.exitcode)
 
     def __init__(self, split=None, timeout=None, wlog=None, mlog=None):
         self.results = []
-        self.split = None
-
         self.split = split
+
         self.timeout = timeout
 
         self.wlog = wlog
@@ -231,67 +219,18 @@ class CommandExecutor:
         if split < 2:
             raise self.Error("bad split (%d) minimum is 2" % split)
 
-        self.q_jobs = Queue()
-        self.q_results = Queue()
-
-        procs = []
-
-        for i in range(self.split):
-            proc = Process(target=self._worker)
-            proc.start()
-            procs.append(proc)
-
-        self.procs = procs
+        self._execute = Parallelize(self.split, self._execute)
+        self.results = self._execute.results
 
     def __call__(self, job):
+        result = self._execute(job)
         if not self.split:
-            result = self._execute(job, self.timeout, self.wlog)
-            self.results.append((job, result))
-        else:
-            self.q_jobs.put(job)
+            self.results.append(result)
 
     def join(self):
-        if not self.split:
-            return
-
-        for i in range(self.split):
-            self.q_jobs.put(self.MAGIC_STOP)
-
-        def qgetall(q):
-            vals = []
-            while True:
-                try:
-                    val = q.get(False)
-                    vals.append(val)
-                except Empty:
-                    break
-
-            return vals
-
-        while True:
-            running = 0
-            for proc in self.procs:
-                if proc.is_alive():
-                    running += 1
-                else:
-                    proc.join()
-
-            self.results += qgetall(self.q_results)
-
-            if not running:
-                break
-
-            time.sleep(0.1)
-
-    def killall(self, sig=signal.SIGTERM):
-        if not self.split:
-            return
-
-        for proc in self.procs:
-            if not proc.is_alive():
-                continue
-
-            os.kill(proc.pid, sig)
+        if self.split:
+            self._execute.wait()
+            self._execute.stop()
 
 def error(e):
     print >> sys.stderr, "error: " + str(e)
@@ -343,13 +282,6 @@ def main():
 
     session = Session(opt_sessions, opt_split)
 
-    def terminate(sig, f):
-        signal.signal(sig, signal.SIG_IGN)
-        raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
-
-    signal.signal(signal.SIGINT, terminate)
-    signal.signal(signal.SIGTERM, terminate)
-
     try:
         executor = CommandExecutor(opt_split, opt_timeout, 
                                    session.wlog, session.mlog)
@@ -357,7 +289,7 @@ def main():
         usage(e)
 
     if opt_split:
-        pids = [ proc.pid for proc in executor.procs ]
+        pids = [ worker.pid for worker in executor._execute.workers ]
         print >> session.mlog, "session %d: split %d workers = %s" % (session.id, len(pids), 
                                                      " ".join(map(str, pids)))
 
@@ -377,6 +309,13 @@ def main():
 
         jobs.append(job)
 
+    def terminate(sig, f):
+        signal.signal(sig, signal.SIG_IGN)
+        raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
+
+    signal.signal(signal.SIGINT, terminate)
+    signal.signal(signal.SIGTERM, terminate)
+
     try:
         for job in jobs:
             executor(job)
@@ -385,7 +324,6 @@ def main():
 
     except SigTerminate, e:
         print >> session.mlog, str(e)
-        executor.killall(e.sig)
         executor.join()
 
         print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % (session.id,
