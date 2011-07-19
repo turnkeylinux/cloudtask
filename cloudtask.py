@@ -31,141 +31,43 @@ import shlex
 import getopt
 import time
 
-import errno
 import signal
 
 from command import Command, fmt_argv
-from paths import Paths
+from session import Session
 
 from multiprocessing import Event
-from multiprocessing_utils import Parallelize
+from multiprocessing_utils import Parallelize, Deferred
 
 class SigTerminate(Exception):
     def __init__(self, msg, sig):
         self.sig = sig
         Exception.__init__(self, msg)
 
-def makedirs(path):
-    try:
-        os.makedirs(path)
-    except OSError, e:
-        if e.errno != errno.EEXIST:
-            raise
+class AttrDict(dict):
+    def __getattr__(self, name):
+        if name in self:
+            return self[name]
+        raise AttributeError("no such attribute '%s'" % name)
 
-class Session:
-    class Error(Exception):
-        pass
-    class SessionPaths(Paths):
-        files = ['workers', 'log', 'jobs']
+    def __setattr__(self, name, val):
+        self[name] = val
 
-    class WorkerLog:
-        def __init__(self, path):
-            self.path = path
-            self.fh = None
+class TaskConf(AttrDict):
+    def __init__(self, apikey=None, command=None, overlay=None, pre=None, post=None, timeout=None):
 
-        def __getattr__(self, attr):
-            if not self.fh:
-                self.fh = file(join(self.path, str(os.getpid())), "a", 1)
+        self.apikey = apikey
+        self.command = command
+        self.overlay = overlay
+        self.pre = pre
+        self.post = post
+        self.timeout = timeout
 
-            return getattr(self.fh, attr)
+def hub_launch(apikey, howmany):
+    raise Exception("not implemented")
 
-    class ManagerLog:
-        def __init__(self, path):
-            self.fh = file(path, "a", 1)
-
-        def write(self, buf):
-            self.fh.write(buf)
-            sys.stdout.write(buf)
-            sys.stdout.flush()
-
-        def __getattr__(self, attr):
-            return getattr(self.fh, attr)
-
-    class Jobs:
-        def __init__(self, path):
-            self.pending = []
-            self.finished = []
-            self.path = path
-
-            if not exists(path):
-                return
-
-            for line in file(path).readlines():
-                line = line.strip()
-                state, command = line.split('\t', 1)
-                if state == "PENDING":
-                    self.pending.append(command)
-                else:
-                    self.finished.append((command, state))
-
-        def update(self, jobs=[], results=[]):
-            for job, result in results:
-                if result is None:
-                    state = "TIMEOUT"
-                else:
-                    state = "EXIT=%s" % result
-
-                self.finished.append((job, state))
-
-            states = self.finished[:]
-
-            self.pending = list((set(self.pending) | set(jobs)) - \
-                                 set([ job for job, result in results ]))
-
-            for job in self.pending:
-                states.append((job, "PENDING"))
-
-            fh = file(self.path, "w")
-            for job, state in states:
-                print >> fh, "%s\t%s" % (state, job)
-            fh.close()
-
-    def __init__(self, sessions_path, opt_split, id=None):
-        if not exists(sessions_path):
-            makedirs(sessions_path)
-
-        if not isdir(sessions_path):
-            raise self.Error("sessions path is not a directory: " + sessions_path)
-
-        session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
-                        if fname.isdigit() ]
-
-        new_session = False if id else True
-        if new_session:
-            if session_ids:
-                new_session_id = max(map(int, session_ids)) + 1
-            else:
-                new_session_id = 1
-
-            self.id = new_session_id
-        else:
-            if id not in session_ids:
-                raise self.Error("no such session '%s'" % `id`)
-
-            self.id = id
-
-        path = join(sessions_path, "%d" % self.id)
-        self.paths = self.SessionPaths(path)
-
-        if new_session:
-            makedirs(path)
-
-        self.jobs = self.Jobs(self.paths.jobs)
-
-        if opt_split:
-            makedirs(self.paths.workers)
-            self.wlog = self.WorkerLog(self.paths.workers)
-            self.mlog = self.ManagerLog(self.paths.log)
-                     
-        else:
-            self.wlog = self.ManagerLog(self.paths.log)
-            self.mlog = self.wlog
-
-        self.started = time.time()
-
-    @property
-    def elapsed(self):
-        return time.time() - self.started 
+def hub_destroy(apikey, addresses):
+    raise Exception("not implemented")
 
 class Timeout:
     def __init__(self, seconds=None):
@@ -178,15 +80,42 @@ class Timeout:
             return True
         return False
 
-class CloudExecutor:
-    class Error(Exception):
-        pass
+class CloudWorker:
+    def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
-    def _execute(self, command):
+        self.event_stop = event_stop
+
+        self.wlog = session.wlog
+        self.mlog = session.mlog
+
+        self.timeout = taskconf.timeout
+
+        if destroy is None:
+            if address:
+                destroy = False
+            else:
+                destroy = True
+
+        self.destroy = destroy
+
+        if not address:
+            address = hub_launch(taskconf.apikey, 1)[0]
+
+        self.address = address
+        self.pid = os.getpid()
+
+    def __getstate__(self):
+        return (self.address, self.pid)
+
+    def __setstate__(self, state):
+        (self.address, self.pid) = state
+
+    def __call__(self, command):
         if self.event_stop:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         timeout = self.timeout
+
         wlog = self.wlog
         mlog = self.mlog
         
@@ -239,28 +168,51 @@ class CloudExecutor:
 
         return (str(command), command.exitcode)
 
-    def __init__(self, split=None, timeout=None, workers=[], wlog=None, mlog=None):
-        self.results = []
-        self.split = split
-
-        self.timeout = timeout
-
-        self.wlog = wlog
-        self.mlog = mlog
-
-        self.event_stop = None
-
-        # TODO: sanity check that workers matches split
-
-        if not split:
+    def __del__(self):
+        if os.getpid() != self.pid:
             return
 
-        if split < 2:
-            raise self.Error("bad split (%d) minimum is 2" % split)
+        if self.destroy:
+            hub_destroy(self.taskconf.apikey, [ self.address ])
 
-        self.event_stop = Event()
-        self._execute = Parallelize(self.split, self._execute)
-        self.results = self._execute.results
+class CloudExecutor:
+    class Error(Exception):
+        pass
+
+    def __init__(self, session, taskconf, split=None, addresses=[]):
+        self.session = session
+        self.taskconf = taskconf
+        self.split = split
+
+        if not split:
+            if addresses:
+                address = addresses[0]
+            else:
+                address = None
+            self._execute = CloudWorker(session, taskconf, address)
+            self.results = []
+
+        else:
+            if split < 2:
+                raise self.Error("bad split (%d) minimum is 2" % split)
+            
+            addresses = addresses[:]
+
+            workers = []
+            event_stop = Event()
+            for i in range(split):
+                if addresses:
+                    address = addresses.pop(0)
+                else:
+                    address = None
+
+                worker = Deferred(CloudWorker, session, taskconf, address, event_stop=event_stop)
+
+                workers.append(worker)
+
+            self._execute = Parallelize(workers)
+            self.results = self._execute.results
+            self.event_stop = event_stop
 
     def __call__(self, job):
         result = self._execute(job)
@@ -296,6 +248,7 @@ def usage(e=None):
 def main():
     opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
                                   join(os.environ['HOME'], '.cloudtask', 'sessions'))
+
     opt_split = None
     opt_timeout = None
     opt_resume = None
@@ -376,22 +329,14 @@ def main():
 
             jobs.append(job)
 
+    taskconf = TaskConf(timeout=opt_timeout)
+
     try:
-        executor = CloudExecutor(opt_split, opt_timeout, opt_workers,
-                                 session.wlog, session.mlog)
+        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
     except CloudExecutor.Error, e:
         usage(e)
 
-    if opt_split:
-        pids = [ worker.pid for worker in executor._execute.workers ]
-        print >> session.mlog, "session %d (pid %d): split %d workers = %s" % \
-                                (session.id, os.getpid(), len(pids), 
-                                 " ".join(map(str, pids)))
-
-    else:
-        print >> session.mlog, "session %d (pid %d), serial" % (session.id, 
-                                                               os.getpid())
-
+    print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
     def terminate(sig, f):
         signal.signal(sig, signal.SIG_IGN)
