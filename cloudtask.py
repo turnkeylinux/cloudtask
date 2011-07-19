@@ -87,6 +87,7 @@ class CloudWorker:
 
         self.wlog = session.wlog
         self.mlog = session.mlog
+        self.session_key = session.key
 
         self.timeout = taskconf.timeout
 

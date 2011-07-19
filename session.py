@@ -6,12 +6,35 @@ from paths import Paths
 import errno
 import time
 
+from temp import TempFile
+import uuid
+
+import executil
+
 def makedirs(path):
     try:
         os.makedirs(path)
     except OSError, e:
         if e.errno != errno.EEXIST:
             raise
+
+class TempSessionKey(TempFile):
+    def __init__(self):
+        TempFile.__init__(self, prefix='key_')
+        os.remove(self.path)
+
+        self.uuid = uuid.uuid4()
+        executil.getoutput("ssh-keygen -N '' -f %s -C %s" % (self.path, self.uuid))
+
+    @property
+    def public(self):
+        return self.path + ".pub"
+
+    def __del__(self):
+        if os.getpid() == self.pid:
+            os.remove(self.public)
+
+        TempFile.__del__(self)
 
 class Session:
     class Error(Exception):
@@ -125,6 +148,7 @@ class Session:
             self.mlog = self.wlog
 
         self.started = time.time()
+        self.key = TempSessionKey()
 
     @property
     def elapsed(self):
