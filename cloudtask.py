@@ -83,27 +83,32 @@ class Timeout:
         return False
 
 class SSH:
-    SSH_RESPONSE_TIMEOUT = 60
+    TIMEOUT = 60
 
     class Error(Exception):
         pass
 
     class Command(Command):
-        def __init__(self, address, command, identity_file=None):
-            opts = ('StrictHostKeyChecking=no',
-                    'PasswordAuthentication=no')
+        OPTS = ('StrictHostKeyChecking=no',
+                'PasswordAuthentication=no')
 
-            self.address = address
-            self.command = command
-
+        @classmethod
+        def argv(cls, identity_file=None, *args):
             argv = ['ssh']
             if identity_file:
                 argv += [ '-i', identity_file ]
 
-            for opt in opts:
+            for opt in cls.OPTS:
                 argv += [ "-o", opt ]
 
-            argv += [ address, command ]
+            argv += args
+            return argv
+
+        def __init__(self, address, command, identity_file=None):
+            self.address = address
+            self.command = command
+
+            argv = self.argv(identity_file, address, command)
             Command.__init__(self, argv, setpgrp=True)
 
         def __str__(self):
@@ -126,10 +131,10 @@ class SSH:
         command.tochild.write(file(key_path).read())
         command.tochild.close()
 
-        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
+        finished = command.wait(self.TIMEOUT)
         if not finished:
             command.terminate()
-            raise self.Error("can't add id to authorized keys: ssh timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
+            raise self.Error("can't add id to authorized keys: ssh timed out after %d seconds" % self.TIMEOUT)
 
         if command.exitcode != 0:
             raise self.Error("can't add id to authorized keys: " + command.output)
@@ -145,20 +150,29 @@ class SSH:
 
         command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % id
         command = self.command(command)
-        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
+        finished = command.wait(self.TIMEOUT)
         if not finished:
             command.terminate()
-            raise self.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
+            raise self.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % self.TIMEOUT)
 
         if command.exitcode != 0:
             raise self.Error("can't remove id from authorized_keys: " + command.output)
 
-    def apply_overlay(self, overlay):
-        pass
+    def apply_overlay(self, overlay_path):
+        ssh_command = " ".join(self.Command.argv(self.identity_file))
+        argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
+                overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
+
+        command = Command(argv, setpgrp=True)
+        command.wait()
+
+        if command.exitcode != 0:
+            raise self.Error("rsync failed: " + command.output)
 
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
+        self.pid = os.getpid()
         self.event_stop = event_stop
 
         self.wlog = session.wlog
@@ -166,7 +180,6 @@ class CloudWorker:
         self.session_key = session.key
 
         self.timeout = taskconf.timeout
-
         if destroy is None:
             if address:
                 destroy = False
@@ -174,20 +187,27 @@ class CloudWorker:
                 destroy = True
 
         self.destroy = destroy
+        self.address = address
 
         if not address:
-            address = hub_launch(taskconf.apikey, 1)[0]
+            self.address = hub_launch(taskconf.apikey, 1)[0]
 
-        self.ssh = SSH(address, identity_file=self.session_key.path)
-        self.ssh.copy_id(self.session_key.public)
+        self.ssh = None
+
+        ssh = SSH(address, identity_file=self.session_key.path)
+        ssh.copy_id(self.session_key.public)
+
+        self.ssh = ssh
 
         if taskconf.overlay:
             self.ssh.apply_overlay(taskconf.overlay)
 
-        self.address = address
-        self.pid = os.getpid()
+        print >> self.mlog, "setup worker: " + address
 
     def _cleanup(self):
+        if not self.ssh:
+            return
+
         self.ssh.remove_id(self.session_key.public)
 
     def __getstate__(self):
@@ -196,22 +216,22 @@ class CloudWorker:
     def __setstate__(self, state):
         (self.address, self.pid) = state
 
+    def status(self, msg):
+        wlog = self.wlog
+        mlog = self.mlog
+
+        if wlog:
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            print >> wlog, "# %s [%s] %s" % (timestamp, self.address, msg)
+
+        if mlog and mlog != wlog:
+            mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
+
     def __call__(self, command):
         if self.event_stop:
             signal.signal(signal.SIGINT, signal.SIG_IGN)
 
         timeout = self.timeout
-
-        wlog = self.wlog
-        mlog = self.mlog
-        
-        def status(msg):
-            if wlog:
-                timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-                print >> wlog, "# %s: %s" % (timestamp, msg)
-
-            if mlog and mlog != wlog:
-                mlog.write("%d: %s" % (os.getpid(), msg) + "\n")
 
         def handle_stop():
             if not self.event_stop:
@@ -223,16 +243,16 @@ class CloudWorker:
         handle_stop()
 
         ssh_command = self.ssh.command(command)
-        status(str(ssh_command))
+        self.status(str(command))
 
         timeout = Timeout(timeout)
         def handler(ssh_command, buf):
-            if buf and wlog:
-                wlog.write(buf)
+            if buf and self.wlog:
+                self.wlog.write(buf)
 
             if ssh_command.running and timeout.expired():
                 ssh_command.terminate()
-                status("timeout %d # %s" % (timeout.seconds, ssh_command))
+                self.status("timeout %d # %s" % (timeout.seconds, command))
 
             handle_stop()
             return True
@@ -243,14 +263,14 @@ class CloudWorker:
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except (SigTerminate, Parallelize.Worker.Terminated):
             ssh_command.terminate()
-            status("terminated # %s" % ssh_command)
+            self.status("terminated # %s" % command)
             raise
 
         if ssh_command.exitcode is not None:
-            status("exit %d # %s" % (ssh_command.exitcode, ssh_command))
+            self.status("exit %d # %s" % (ssh_command.exitcode, command))
 
-        if wlog:
-            print >> wlog
+        if self.wlog:
+            print >> self.wlog
 
         return (str(command), ssh_command.exitcode)
 
@@ -260,7 +280,7 @@ class CloudWorker:
 
         self._cleanup()
 
-        if self.destroy:
+        if self.destroy and self.address:
             hub_destroy(self.taskconf.apikey, [ self.address ])
 
 class CloudExecutor:
@@ -428,12 +448,12 @@ def main():
     taskconf = TaskConf(overlay=opt_overlay,
                         timeout=opt_timeout)
 
+    print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
+
     try:
         executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
     except CloudExecutor.Error, e:
         usage(e)
-
-    print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
     def terminate(sig, f):
         signal.signal(sig, signal.SIG_IGN)
