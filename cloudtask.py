@@ -4,6 +4,7 @@ Execute tasks in the cloud
 
 Options:
 
+    --overlay=PATH           Path to worker filesystem overlay
     --workers=<workers>      List of pre-launched workers to use
         
         <workers> := path/to/file | host1,host2,...hostN
@@ -81,63 +82,72 @@ class Timeout:
             return True
         return False
 
-class SSH(Command):
+class SSH:
     SSH_RESPONSE_TIMEOUT = 60
 
     class Error(Exception):
         pass
 
-    def __init__(self, address, command, identity_file=None):
-        opts = ('StrictHostKeyChecking=no',
-                'PasswordAuthentication=no')
+    class Command(Command):
+        def __init__(self, address, command, identity_file=None):
+            opts = ('StrictHostKeyChecking=no',
+                    'PasswordAuthentication=no')
 
+            self.address = address
+            self.command = command
+
+            argv = ['ssh']
+            if identity_file:
+                argv += [ '-i', identity_file ]
+
+            for opt in opts:
+                argv += [ "-o", opt ]
+
+            argv += [ address, command ]
+            Command.__init__(self, argv, setpgrp=True)
+
+        def __str__(self):
+            return "ssh %s %s" % (self.address, `self.command`)
+
+    def __init__(self, address, identity_file=None):
         self.address = address
-        self.command = command
+        self.identity_file = identity_file
 
-        argv = ['ssh']
-        if identity_file:
-            argv += [ '-i', identity_file ]
+    def command(self, command):
+        return self.Command(self.address, command, identity_file=self.identity_file)
 
-        for opt in opts:
-            argv += [ "-o", opt ]
-
-        argv += [ address, command ]
-        Command.__init__(self, argv, setpgrp=True)
-
-    def __str__(self):
-        return "ssh %s %s" % (self.address, `self.command`)
-
-    @classmethod
-    def copy_id(cls, key_path, address):
-        command = Command(('ssh-copy-id', '-i', key_path, address))
-        finished = command.wait(cls.SSH_RESPONSE_TIMEOUT)
+    def copy_id(self, key_path):
+        command = Command(('ssh-copy-id', '-i', key_path, self.address))
+        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
 
         if not finished:
             command.terminate()
-            raise cls.Error("ssh-copy-id timed out after %d seconds" % cls.SSH_RESPONSE_TIMEOUT)
+            raise self.Error("ssh-copy-id timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
 
         if command.exitcode != 0:
-            raise cls.Error("ssh-copy-id: " + command.output)
+            raise self.Error("ssh-copy-id: " + command.output)
 
-    @classmethod
-    def remove_id(cls, key_path, address, identity_file=None):
+    def remove_id(self, key_path):
         if not key_path.endswith(".pub"):
             key_path += ".pub"
 
         vals = file(key_path).read().split()
         if not vals[0].startswith('ssh'):
-            raise cls.Error("invalid public key in " + key_path)
+            raise self.Error("invalid public key in " + key_path)
         id = vals[-1]
 
         command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % id
-        ssh = cls(address, command, identity_file=identity_file)
-        finished = ssh.wait(cls.SSH_RESPONSE_TIMEOUT)
+        command = self.command(command)
+        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
         if not finished:
-            ssh.terminate()
-            raise cls.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % cls.SSH_RESPONSE_TIMEOUT)
+            command.terminate()
+            raise self.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
 
-        if ssh.exitcode != 0:
-            raise cls.Error("can't remove id from authorized_keys: " + ssh.output)
+        if command.exitcode != 0:
+            raise self.Error("can't remove id from authorized_keys: " + command.output)
+
+    def apply_overlay(self, overlay):
+        pass
 
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
@@ -161,17 +171,17 @@ class CloudWorker:
         if not address:
             address = hub_launch(taskconf.apikey, 1)[0]
 
+        self.ssh = SSH(address, identity_file=self.session_key.path)
+        self.ssh.copy_id(self.session_key.public)
+
+        if taskconf.overlay:
+            self.ssh.apply_overlay(taskconf.overlay)
+
         self.address = address
         self.pid = os.getpid()
 
-        self._setup()
-
-    def _setup(self):
-        SSH.copy_id(self.session_key.public, self.address)
-
     def _cleanup(self):
-        SSH.remove_id(self.session_key.public, self.address, 
-                      identity_file=self.session_key.path)
+        self.ssh.remove_id(self.session_key.public)
 
     def __getstate__(self):
         return (self.address, self.pid)
@@ -205,37 +215,37 @@ class CloudWorker:
 
         handle_stop()
 
-        ssh = SSH(self.address, command, identity_file=self.session_key.path)
-        status(str(ssh))
+        ssh_command = self.ssh.command(command)
+        status(str(ssh_command))
 
         timeout = Timeout(timeout)
-        def handler(ssh, buf):
+        def handler(ssh_command, buf):
             if buf and wlog:
                 wlog.write(buf)
 
-            if ssh.running and timeout.expired():
-                ssh.terminate()
-                status("timeout %d # %s" % (timeout.seconds, ssh))
+            if ssh_command.running and timeout.expired():
+                ssh_command.terminate()
+                status("timeout %d # %s" % (timeout.seconds, ssh_command))
 
             handle_stop()
             return True
 
         try:
-            out = ssh.read(handler)
+            out = ssh_command.read(handler)
 
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except (SigTerminate, Parallelize.Worker.Terminated):
-            ssh.terminate()
-            status("terminated # %s" % ssh)
+            ssh_command.terminate()
+            status("terminated # %s" % ssh_command)
             raise
 
-        if ssh.exitcode is not None:
-            status("exit %d # %s" % (ssh.exitcode, ssh))
+        if ssh_command.exitcode is not None:
+            status("exit %d # %s" % (ssh_command.exitcode, ssh_command))
 
         if wlog:
             print >> wlog
 
-        return (str(command), ssh.exitcode)
+        return (str(command), ssh_command.exitcode)
 
     def __del__(self):
         if os.getpid() != self.pid:
@@ -320,6 +330,7 @@ def main():
     opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
                                   join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
+    opt_overlay = None
     opt_split = None
     opt_timeout = None
     opt_resume = None
@@ -328,6 +339,7 @@ def main():
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
                                    'h', ['help', 
+                                         'overlay=',
                                          'timeout=',
                                          'split=',
                                          'sessions=',
@@ -340,6 +352,12 @@ def main():
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
+
+        if opt == '--overlay':
+            if not isdir(val):
+                usage("overlay '%s' not a directory" % val)
+
+            opt_overlay = val
 
         if opt == '--timeout':
             opt_timeout = float(val)
@@ -400,7 +418,8 @@ def main():
 
             jobs.append(job)
 
-    taskconf = TaskConf(timeout=opt_timeout)
+    taskconf = TaskConf(overlay=opt_overlay,
+                        timeout=opt_timeout)
 
     try:
         executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
@@ -426,8 +445,6 @@ def main():
         print >> session.mlog, str(e)
         executor.stop()
 
-        print `jobs`
-        print `executor.results`
         session.jobs.update(jobs, executor.results)
         print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
                                 (session.id, 
