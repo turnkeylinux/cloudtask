@@ -81,7 +81,12 @@ class Timeout:
             return True
         return False
 
-class SSHCommand(Command):
+class SSH(Command):
+    SSH_RESPONSE_TIMEOUT = 60
+
+    class Error(Exception):
+        pass
+
     def __init__(self, address, command):
         opts = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
@@ -98,6 +103,18 @@ class SSHCommand(Command):
 
     def __str__(self):
         return "ssh %s %s" % (self.address, `self.command`)
+
+    @classmethod
+    def copy_id(cls, key_path, address):
+        command = Command(('ssh-copy-id', '-i', key_path, address))
+        finished = command.wait(cls.SSH_RESPONSE_TIMEOUT)
+
+        if not finished:
+            command.terminate()
+            raise cls.Error("ssh-copy-id timed out after %d seconds" % cls.SSH_RESPONSE_TIMEOUT)
+
+        if command.exitcode != 0:
+            raise cls.Error("ssh-copy-id: " + command.output)
 
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
@@ -123,6 +140,11 @@ class CloudWorker:
 
         self.address = address
         self.pid = os.getpid()
+
+        self._setup()
+
+    def _setup(self):
+        SSH.copy_id(self.session_key.path, self.address)
 
     def __getstate__(self):
         return (self.address, self.pid)
@@ -156,7 +178,7 @@ class CloudWorker:
 
         handle_stop()
 
-        ssh = SSHCommand(self.address, command)
+        ssh = SSH(self.address, command)
         status(str(ssh))
 
         timeout = Timeout(timeout)
