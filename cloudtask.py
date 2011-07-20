@@ -30,6 +30,7 @@ import sys
 import shlex
 import getopt
 import time
+import copy
 
 import signal
 
@@ -209,7 +210,7 @@ class CloudExecutor:
             if split < 2:
                 raise self.Error("bad split (%d) minimum is 2" % split)
             
-            addresses = addresses[:]
+            addresses = copy.copy(addresses)
 
             workers = []
             event_stop = Event()
