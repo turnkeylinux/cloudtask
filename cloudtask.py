@@ -117,15 +117,22 @@ class SSH:
         return self.Command(self.address, command, identity_file=self.identity_file)
 
     def copy_id(self, key_path):
-        command = Command(('ssh-copy-id', '-i', key_path, self.address))
-        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
+        if not key_path.endswith(".pub"):
+            key_path += ".pub"
 
+        command = 'mkdir -p $HOME/.ssh; cat >> $HOME/.ssh/authorized_keys'
+
+        command = self.command(command)
+        command.tochild.write(file(key_path).read())
+        command.tochild.close()
+
+        finished = command.wait(self.SSH_RESPONSE_TIMEOUT)
         if not finished:
             command.terminate()
-            raise self.Error("ssh-copy-id timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
+            raise self.Error("can't add id to authorized keys: ssh timed out after %d seconds" % self.SSH_RESPONSE_TIMEOUT)
 
         if command.exitcode != 0:
-            raise self.Error("ssh-copy-id: " + command.output)
+            raise self.Error("can't add id to authorized keys: " + command.output)
 
     def remove_id(self, key_path):
         if not key_path.endswith(".pub"):
