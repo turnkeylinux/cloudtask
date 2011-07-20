@@ -80,6 +80,18 @@ class Timeout:
             return True
         return False
 
+class SSHCommand(Command):
+    def __init__(self, address, command):
+        opts = ('StrictHostKeyChecking=no',
+                'PasswordAuthentication=no')
+
+        argv = ['ssh']
+        for opt in opts:
+            argv += [ "-o", opt ]
+
+        argv += [ address, command ]
+        Command.__init__(self, argv, setpgrp=True)
+
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
@@ -137,7 +149,7 @@ class CloudWorker:
 
         handle_stop()
 
-        command = Command(command, pty=True)
+        command = SSHCommand(self.address, command)
         status(str(command))
 
         timeout = Timeout(timeout)
