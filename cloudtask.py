@@ -156,37 +156,37 @@ class CloudWorker:
 
         handle_stop()
 
-        command = SSHCommand(self.address, command)
-        status(str(command))
+        ssh = SSHCommand(self.address, command)
+        status(str(ssh))
 
         timeout = Timeout(timeout)
-        def handler(command, buf):
+        def handler(ssh, buf):
             if buf and wlog:
                 wlog.write(buf)
 
-            if command.running and timeout.expired():
-                command.terminate()
-                status("timeout %d # %s" % (timeout.seconds, command))
+            if ssh.running and timeout.expired():
+                ssh.terminate()
+                status("timeout %d # %s" % (timeout.seconds, ssh))
 
             handle_stop()
             return True
 
         try:
-            out = command.read(handler)
+            out = ssh.read(handler)
 
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except (SigTerminate, Parallelize.Worker.Terminated):
-            command.terminate()
-            status("terminated # %s" % command)
+            ssh.terminate()
+            status("terminated # %s" % ssh)
             raise
 
-        if command.exitcode is not None:
-            status("exit %d # %s" % (command.exitcode, command))
+        if ssh.exitcode is not None:
+            status("exit %d # %s" % (ssh.exitcode, ssh))
 
         if wlog:
             print >> wlog
 
-        return (str(command), command.exitcode)
+        return (str(command), ssh.exitcode)
 
     def __del__(self):
         if os.getpid() != self.pid:
@@ -375,6 +375,8 @@ def main():
         print >> session.mlog, str(e)
         executor.stop()
 
+        print `jobs`
+        print `executor.results`
         session.jobs.update(jobs, executor.results)
         print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
                                 (session.id, 
