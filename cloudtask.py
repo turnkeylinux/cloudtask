@@ -87,7 +87,7 @@ class SSH(Command):
     class Error(Exception):
         pass
 
-    def __init__(self, address, command):
+    def __init__(self, address, command, identity_file=None):
         opts = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
 
@@ -95,6 +95,9 @@ class SSH(Command):
         self.command = command
 
         argv = ['ssh']
+        if identity_file:
+            argv += [ '-i', identity_file ]
+
         for opt in opts:
             argv += [ "-o", opt ]
 
@@ -115,6 +118,26 @@ class SSH(Command):
 
         if command.exitcode != 0:
             raise cls.Error("ssh-copy-id: " + command.output)
+
+    @classmethod
+    def remove_id(cls, key_path, address, identity_file=None):
+        if not key_path.endswith(".pub"):
+            key_path += ".pub"
+
+        vals = file(key_path).read().split()
+        if not vals[0].startswith('ssh'):
+            raise cls.Error("invalid public key in " + key_path)
+        id = vals[-1]
+
+        command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % id
+        ssh = cls(address, command, identity_file=identity_file)
+        finished = ssh.wait(cls.SSH_RESPONSE_TIMEOUT)
+        if not finished:
+            ssh.terminate()
+            raise cls.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % cls.SSH_RESPONSE_TIMEOUT)
+
+        if ssh.exitcode != 0:
+            raise cls.Error("can't remove id from authorized_keys: " + ssh.output)
 
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
@@ -144,7 +167,11 @@ class CloudWorker:
         self._setup()
 
     def _setup(self):
-        SSH.copy_id(self.session_key.path, self.address)
+        SSH.copy_id(self.session_key.public, self.address)
+
+    def _cleanup(self):
+        SSH.remove_id(self.session_key.public, self.address, 
+                      identity_file=self.session_key.path)
 
     def __getstate__(self):
         return (self.address, self.pid)
@@ -178,7 +205,7 @@ class CloudWorker:
 
         handle_stop()
 
-        ssh = SSH(self.address, command)
+        ssh = SSH(self.address, command, identity_file=self.session_key.path)
         status(str(ssh))
 
         timeout = Timeout(timeout)
@@ -213,6 +240,8 @@ class CloudWorker:
     def __del__(self):
         if os.getpid() != self.pid:
             return
+
+        self._cleanup()
 
         if self.destroy:
             hub_destroy(self.taskconf.apikey, [ self.address ])
