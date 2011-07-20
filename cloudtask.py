@@ -86,12 +86,18 @@ class SSHCommand(Command):
         opts = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
 
+        self.address = address
+        self.command = command
+
         argv = ['ssh']
         for opt in opts:
             argv += [ "-o", opt ]
 
         argv += [ address, command ]
         Command.__init__(self, argv, setpgrp=True)
+
+    def __str__(self):
+        return "ssh %s %s" % (self.address, `self.command`)
 
 class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
