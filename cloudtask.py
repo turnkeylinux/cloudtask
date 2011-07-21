@@ -4,6 +4,9 @@ Execute tasks in the cloud
 
 Options:
 
+    --pre=COMMAND            Worker setup command
+    --post=COMMAND           Worker cleanup command
+
     --overlay=PATH           Path to worker filesystem overlay
     --workers=<workers>      List of pre-launched workers to use
         
@@ -83,12 +86,12 @@ class Timeout:
         return False
 
 class SSH:
-    TIMEOUT = 60
-
     class Error(Exception):
         pass
 
     class Command(Command):
+        TIMEOUT = 30
+
         OPTS = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
 
@@ -114,6 +117,15 @@ class SSH:
         def __str__(self):
             return "ssh %s %s" % (self.address, `self.command`)
 
+        def wait(self, timeout=TIMEOUT, poll_interval=0.2):
+            finished = Command.wait(self, timeout, poll_interval)
+            if not finished:
+                self.terminate()
+                raise self.Error("ssh timed out after %d seconds" % timeout)
+
+            if self.exitcode != 0:
+                raise self.Error(self.output)
+
     def __init__(self, address, identity_file=None):
         self.address = address
         self.identity_file = identity_file
@@ -131,14 +143,11 @@ class SSH:
         command.tochild.write(file(key_path).read())
         command.tochild.close()
 
-        finished = command.wait(self.TIMEOUT)
-        if not finished:
-            command.terminate()
-            raise self.Error("can't add id to authorized keys: ssh timed out after %d seconds" % self.TIMEOUT)
-
-        if command.exitcode != 0:
-            raise self.Error("can't add id to authorized keys: " + command.output)
-
+        try:
+            command.wait()
+        except command.Error, e:
+            raise self.Error("can't add id to authorized keys: " + str(e))
+        
     def remove_id(self, key_path):
         if not key_path.endswith(".pub"):
             key_path += ".pub"
@@ -150,17 +159,15 @@ class SSH:
 
         command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % id
         command = self.command(command)
-        finished = command.wait(self.TIMEOUT)
-        if not finished:
-            command.terminate()
-            raise self.Error("can't remove id from authorized_keys: ssh timed out after %d seconds" % self.TIMEOUT)
 
-        if command.exitcode != 0:
-            raise self.Error("can't remove id from authorized_keys: " + command.output)
+        try:
+            command.wait()
+        except command.Error, e:
+            raise self.Error("can't remove id from authorized-keys: " + str(e))
 
     def apply_overlay(self, overlay_path):
         ssh_command = " ".join(self.Command.argv(self.identity_file))
-        argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
+        argv = [ 'rsync', '--timeout=%d' % self.Command.TIMEOUT, '-rHEL', '-e', ssh_command,
                 overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
 
         command = Command(argv, setpgrp=True)
@@ -202,11 +209,19 @@ class CloudWorker:
         if taskconf.overlay:
             self.ssh.apply_overlay(taskconf.overlay)
 
+        if taskconf.pre:
+            ssh.command(taskconf.pre).wait()
+
+        self.cleanup_command = taskconf.post
+
         print >> self.mlog, "setup worker: " + address
 
     def _cleanup(self):
         if not self.ssh:
             return
+
+        if self.cleanup_command:
+            self.ssh.command(self.cleanup_command).wait()
 
         self.ssh.remove_id(self.session_key.public)
 
@@ -357,6 +372,8 @@ def main():
     opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
                                   join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
+    opt_pre = None
+    opt_post = None
     opt_overlay = None
     opt_split = None
     opt_timeout = None
@@ -367,6 +384,8 @@ def main():
         opts, args = getopt.getopt(sys.argv[1:], 
                                    'h', ['help', 
                                          'overlay=',
+                                         'pre=',
+                                         'post=',
                                          'timeout=',
                                          'split=',
                                          'sessions=',
@@ -379,6 +398,12 @@ def main():
     for opt, val in opts:
         if opt in ('-h', '--help'):
             usage()
+
+        if opt == '--pre':
+            opt_pre = val
+
+        if opt == '--post':
+            opt_post = val
 
         if opt == '--overlay':
             if not isdir(val):
@@ -446,6 +471,8 @@ def main():
             jobs.append(job)
 
     taskconf = TaskConf(overlay=opt_overlay,
+                        pre=opt_pre,
+                        post=opt_post,
                         timeout=opt_timeout)
 
     print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
