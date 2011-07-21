@@ -516,22 +516,26 @@ def main():
     signal.signal(signal.SIGINT, terminate)
     signal.signal(signal.SIGTERM, terminate)
 
-    try:
-        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
-    except CloudExecutor.Error, e:
-        usage(e)
+    executor = None
 
     try:
+        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
+
         for job in jobs:
             executor(job)
 
         executor.join()
 
-    except SigTerminate, e:
+    except Exception, e:
         print >> session.mlog, str(e)
-        executor.stop()
 
-        session.jobs.update(jobs, executor.results)
+        if executor:
+            executor.stop()
+            results = executor.results
+        else:
+            results = []
+
+        session.jobs.update(jobs, results)
         print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
                                 (session.id, 
                                  len(session.jobs.finished), 
