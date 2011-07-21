@@ -35,6 +35,7 @@ import shlex
 import getopt
 import time
 import copy
+import traceback
 
 import signal
 
@@ -43,6 +44,7 @@ from session import Session
 
 from multiprocessing import Event
 from multiprocessing_utils import Parallelize, Deferred
+
 
 class SigTerminate(Exception):
     def __init__(self, msg, sig):
@@ -95,6 +97,9 @@ class SSH:
         OPTS = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
 
+        class TimeoutError(Command.Error):
+            pass
+
         @classmethod
         def argv(cls, identity_file=None, *args):
             argv = ['ssh']
@@ -117,11 +122,11 @@ class SSH:
         def __str__(self):
             return "ssh %s %s" % (self.address, `self.command`)
 
-        def wait(self, timeout=TIMEOUT, poll_interval=0.2):
-            finished = Command.wait(self, timeout, poll_interval)
+        def close(self, timeout=TIMEOUT):
+            finished = self.wait(timeout)
             if not finished:
                 self.terminate()
-                raise self.Error("ssh timed out after %d seconds" % timeout)
+                raise self.TimeoutError("ssh timed out after %d seconds" % timeout)
 
             if self.exitcode != 0:
                 raise self.Error(self.output)
@@ -129,6 +134,21 @@ class SSH:
     def __init__(self, address, identity_file=None):
         self.address = address
         self.identity_file = identity_file
+
+        if not self.is_alive():
+            raise self.Error("%s is not alive " % address)
+
+    def is_alive(self, timeout=Command.TIMEOUT):
+        command = self.command('true')
+        try:
+            command.close(timeout)
+        except command.TimeoutError:
+            return False
+
+        except command.Error:
+            raise Error("unexpected error")
+
+        return True
 
     def command(self, command):
         return self.Command(self.address, command, identity_file=self.identity_file)
@@ -144,7 +164,7 @@ class SSH:
         command.tochild.close()
 
         try:
-            command.wait()
+            command.close()
         except command.Error, e:
             raise self.Error("can't add id to authorized keys: " + str(e))
         
@@ -161,7 +181,7 @@ class SSH:
         command = self.command(command)
 
         try:
-            command.wait()
+            command.close()
         except command.Error, e:
             raise self.Error("can't remove id from authorized-keys: " + str(e))
 
@@ -180,6 +200,10 @@ class CloudWorker:
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
         self.pid = os.getpid()
+
+        if event_stop:
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+
         self.event_stop = event_stop
 
         self.wlog = session.wlog
@@ -187,6 +211,8 @@ class CloudWorker:
         self.session_key = session.key
 
         self.timeout = taskconf.timeout
+        self.cleanup_command = taskconf.post
+
         if destroy is None:
             if address:
                 destroy = False
@@ -196,32 +222,42 @@ class CloudWorker:
         self.destroy = destroy
         self.address = address
 
-        if not address:
+        if not self.address:
             self.address = hub_launch(taskconf.apikey, 1)[0]
+            self.status("hub launched worker")
+        else:
+            self.status("using existing worker")
 
         self.ssh = None
+        try:
+            self.ssh = SSH(address, identity_file=self.session_key.path)
+        except SSH.Error, e:
+            self.status("ssh error: " + str(e))
+            traceback.print_exc(file=self.wlog)
 
-        ssh = SSH(address, identity_file=self.session_key.path)
-        ssh.copy_id(self.session_key.public)
+            raise
 
-        self.ssh = ssh
+        try:
+            self.ssh.copy_id(self.session_key.public)
 
-        if taskconf.overlay:
-            self.ssh.apply_overlay(taskconf.overlay)
+            if taskconf.overlay:
+                self.ssh.apply_overlay(taskconf.overlay)
 
-        if taskconf.pre:
-            ssh.command(taskconf.pre).wait()
+            if taskconf.pre:
+                self.ssh.command(taskconf.pre).close()
 
-        self.cleanup_command = taskconf.post
+        except Exception:
+            self.status("setup failed")
+            traceback.print_exc(file=self.wlog)
 
-        print >> self.mlog, "setup worker: " + address
+            raise
 
     def _cleanup(self):
         if not self.ssh:
             return
 
         if self.cleanup_command:
-            self.ssh.command(self.cleanup_command).wait()
+            self.ssh.command(self.cleanup_command).close()
 
         self.ssh.remove_id(self.session_key.public)
 
@@ -243,9 +279,6 @@ class CloudWorker:
             mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
 
     def __call__(self, command):
-        if self.event_stop:
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-
         timeout = self.timeout
 
         def handle_stop():
@@ -316,26 +349,22 @@ class CloudExecutor:
             self.results = []
 
         else:
-            if split < 2:
-                raise self.Error("bad split (%d) minimum is 2" % split)
-            
             addresses = copy.copy(addresses)
 
             workers = []
-            event_stop = Event()
+            self.event_stop = Event()
             for i in range(split):
                 if addresses:
                     address = addresses.pop(0)
                 else:
                     address = None
 
-                worker = Deferred(CloudWorker, session, taskconf, address, event_stop=event_stop)
+                worker = Deferred(CloudWorker, session, taskconf, address, event_stop=self.event_stop)
 
                 workers.append(worker)
 
             self._execute = Parallelize(workers)
             self.results = self._execute.results
-            self.event_stop = event_stop
 
     def __call__(self, job):
         result = self._execute(job)
@@ -419,6 +448,9 @@ def main():
             if opt_split < 1:
                 usage("bad --split value '%s'" % val)
 
+            if opt_split == 1:
+                opt_split = None
+
         if opt == '--sessions':
             opt_sessions = val
 
@@ -477,17 +509,17 @@ def main():
 
     print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
-    try:
-        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
-    except CloudExecutor.Error, e:
-        usage(e)
-
     def terminate(sig, f):
         signal.signal(sig, signal.SIG_IGN)
         raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
 
     signal.signal(signal.SIGINT, terminate)
     signal.signal(signal.SIGTERM, terminate)
+
+    try:
+        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
+    except CloudExecutor.Error, e:
+        usage(e)
 
     try:
         for job in jobs:
