@@ -112,9 +112,11 @@ class SSH:
             argv += args
             return argv
 
-        def __init__(self, address, command, identity_file=None):
+        def __init__(self, address, command, 
+                     identity_file=None, callback=None):
             self.address = address
             self.command = command
+            self.callback = callback
 
             argv = self.argv(identity_file, address, command)
             Command.__init__(self, argv, setpgrp=True)
@@ -123,7 +125,7 @@ class SSH:
             return "ssh %s %s" % (self.address, `self.command`)
 
         def close(self, timeout=TIMEOUT):
-            finished = self.wait(timeout)
+            finished = self.wait(timeout, callback=self.callback)
             if not finished:
                 self.terminate()
                 raise self.TimeoutError("ssh timed out after %d seconds" % timeout)
@@ -131,9 +133,10 @@ class SSH:
             if self.exitcode != 0:
                 raise self.Error(self.output)
 
-    def __init__(self, address, identity_file=None):
+    def __init__(self, address, identity_file=None, callback=None):
         self.address = address
         self.identity_file = identity_file
+        self.callback = callback
 
         if not self.is_alive():
             raise self.Error("%s is not alive " % address)
@@ -146,12 +149,14 @@ class SSH:
             return False
 
         except command.Error:
-            raise Error("unexpected error")
+            raise self.Error("unexpected error")
 
         return True
 
     def command(self, command):
-        return self.Command(self.address, command, identity_file=self.identity_file)
+        return self.Command(self.address, command, 
+                            identity_file=self.identity_file,
+                            callback=self.callback)
 
     def copy_id(self, key_path):
         if not key_path.endswith(".pub"):
@@ -191,7 +196,7 @@ class SSH:
                 overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
 
         command = Command(argv, setpgrp=True)
-        command.wait()
+        command.wait(callback=self.callback)
 
         if command.exitcode != 0:
             raise self.Error("rsync failed: " + command.output)
@@ -230,7 +235,9 @@ class CloudWorker:
 
         self.ssh = None
         try:
-            self.ssh = SSH(address, identity_file=self.session_key.path)
+            self.ssh = SSH(address, 
+                           identity_file=self.session_key.path, 
+                           callback=self.handle_stop)
         except SSH.Error, e:
             self.status("ssh error: " + str(e))
             traceback.print_exc(file=self.wlog)
@@ -278,20 +285,20 @@ class CloudWorker:
         if mlog and mlog != wlog:
             mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
 
+    def handle_stop(self):
+        if not self.event_stop:
+            return
+
+        if self.event_stop.is_set():
+            raise Parallelize.Worker.Terminated
+
     def __call__(self, command):
         timeout = self.timeout
 
-        def handle_stop():
-            if not self.event_stop:
-                return
+        self.handle_stop()
 
-            if self.event_stop.is_set():
-                raise Parallelize.Worker.Terminated
-
-        handle_stop()
-
-        ssh_command = self.ssh.command(command)
         self.status(str(command))
+        ssh_command = self.ssh.command(command)
 
         timeout = Timeout(timeout)
         def handler(ssh_command, buf):
@@ -302,7 +309,7 @@ class CloudWorker:
                 ssh_command.terminate()
                 self.status("timeout %d # %s" % (timeout.seconds, command))
 
-            handle_stop()
+            self.handle_stop()
             return True
 
         try:
