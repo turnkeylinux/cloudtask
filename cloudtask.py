@@ -87,6 +87,9 @@ class Timeout:
             return True
         return False
 
+    def reset(self):
+        self.started = time.time()
+
 class SSH:
     class Error(Exception):
         pass
@@ -300,13 +303,21 @@ class CloudWorker:
         ssh_command = self.ssh.command(command)
 
         timeout = Timeout(timeout)
+        read_timeout = Timeout(self.ssh.TIMEOUT)
         def handler(ssh_command, buf):
             if buf and self.wlog:
                 self.wlog.write(buf)
+                read_timeout.reset()
 
             if ssh_command.running and timeout.expired():
                 ssh_command.terminate()
                 self.status("timeout %d # %s" % (timeout.seconds, command))
+
+            if read_timeout.expired():
+                if not self.ssh.is_alive():
+                    self.status("worker is not alive")
+                    raise Parallelize.Worker.Terminated
+                read_timeout.reset()
 
             self.handle_stop()
             return True
