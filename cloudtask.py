@@ -133,6 +133,8 @@ class SSH:
             if self.exitcode != 0:
                 raise self.Error(self.output)
 
+    TIMEOUT = Command.TIMEOUT
+
     def __init__(self, address, identity_file=None, callback=None):
         self.address = address
         self.identity_file = identity_file
@@ -141,15 +143,12 @@ class SSH:
         if not self.is_alive():
             raise self.Error("%s is not alive " % address)
 
-    def is_alive(self, timeout=Command.TIMEOUT):
+    def is_alive(self, timeout=TIMEOUT):
         command = self.command('true')
         try:
             command.close(timeout)
-        except command.TimeoutError:
+        except (command.TimeoutError, command.Error):
             return False
-
-        except command.Error:
-            raise self.Error("unexpected error")
 
         return True
 
@@ -192,7 +191,7 @@ class SSH:
 
     def apply_overlay(self, overlay_path):
         ssh_command = " ".join(self.Command.argv(self.identity_file))
-        argv = [ 'rsync', '--timeout=%d' % self.Command.TIMEOUT, '-rHEL', '-e', ssh_command,
+        argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
                 overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
 
         command = Command(argv, setpgrp=True)
