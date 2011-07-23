@@ -220,6 +220,9 @@ class SSH:
             raise self.Error("rsync failed: " + command.output)
 
 class CloudWorker:
+    class Error(Exception):
+        pass
+
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
         self.pid = os.getpid()
@@ -262,7 +265,7 @@ class CloudWorker:
             self.status("ssh error: " + str(e))
             traceback.print_exc(file=self.wlog)
 
-            raise
+            raise self.Error(e)
 
         try:
             self.ssh.copy_id(self.session_key.public)
@@ -273,11 +276,11 @@ class CloudWorker:
             if taskconf.pre:
                 self.ssh.command(taskconf.pre).close()
 
-        except Exception:
+        except Exception, e:
             self.status("setup failed")
             traceback.print_exc(file=self.wlog)
 
-            raise
+            raise self.Error(e)
 
     def _cleanup(self):
         if not self.ssh:
@@ -572,7 +575,8 @@ def main():
         executor.join()
 
     except Exception, e:
-        traceback.print_exc(file=session.mlog)
+        if not isinstance(e, CloudWorker.Error):
+            traceback.print_exc(file=session.mlog)
 
         if executor:
             executor.stop()
