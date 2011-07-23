@@ -4,6 +4,8 @@ Execute tasks in the cloud
 
 Options:
 
+    --user=USERNAME          Username to execute commands as (default: root)
+                
     --pre=COMMAND            Worker setup command
     --post=COMMAND           Worker cleanup command
 
@@ -61,7 +63,7 @@ class AttrDict(dict):
         self[name] = val
 
 class TaskConf(AttrDict):
-    def __init__(self, apikey=None, command=None, overlay=None, pre=None, post=None, timeout=None):
+    def __init__(self, apikey=None, command=None, overlay=None, pre=None, post=None, timeout=None, user=None):
 
         self.apikey = apikey
         self.command = command
@@ -69,6 +71,11 @@ class TaskConf(AttrDict):
         self.pre = pre
         self.post = post
         self.timeout = timeout
+
+        if user is None:
+            user = 'root'
+
+        self.user = user
 
 def hub_launch(apikey, howmany):
     raise Exception("not implemented")
@@ -104,10 +111,13 @@ class SSH:
             pass
 
         @classmethod
-        def argv(cls, identity_file=None, *args):
+        def argv(cls, identity_file=None, login_name=None, *args):
             argv = ['ssh']
             if identity_file:
                 argv += [ '-i', identity_file ]
+
+            if login_name:
+                argv += [ '-l', login_name ]
 
             for opt in cls.OPTS:
                 argv += [ "-o", opt ]
@@ -116,12 +126,14 @@ class SSH:
             return argv
 
         def __init__(self, address, command, 
-                     identity_file=None, callback=None):
+                     identity_file=None, 
+                     login_name=None,
+                     callback=None):
             self.address = address
             self.command = command
             self.callback = callback
 
-            argv = self.argv(identity_file, address, command)
+            argv = self.argv(identity_file, login_name, address, command)
             Command.__init__(self, argv, setpgrp=True)
 
         def __str__(self):
@@ -138,9 +150,11 @@ class SSH:
 
     TIMEOUT = Command.TIMEOUT
 
-    def __init__(self, address, identity_file=None, callback=None):
+    def __init__(self, address, 
+                 identity_file=None, login_name=None, callback=None):
         self.address = address
         self.identity_file = identity_file
+        self.login_name = login_name
         self.callback = callback
 
         if not self.is_alive():
@@ -158,6 +172,7 @@ class SSH:
     def command(self, command):
         return self.Command(self.address, command, 
                             identity_file=self.identity_file,
+                            login_name=self.login_name,
                             callback=self.callback)
 
     def copy_id(self, key_path):
@@ -193,7 +208,8 @@ class SSH:
             raise self.Error("can't remove id from authorized-keys: " + str(e))
 
     def apply_overlay(self, overlay_path):
-        ssh_command = " ".join(self.Command.argv(self.identity_file))
+        ssh_command = " ".join(self.Command.argv(self.identity_file, 
+                                                 self.login_name))
         argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
                 overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
 
@@ -219,6 +235,7 @@ class CloudWorker:
 
         self.timeout = taskconf.timeout
         self.cleanup_command = taskconf.post
+        self.user = taskconf.user
 
         if destroy is None:
             if address:
@@ -239,6 +256,7 @@ class CloudWorker:
         try:
             self.ssh = SSH(address, 
                            identity_file=self.session_key.path, 
+                           login_name=taskconf.user,
                            callback=self.handle_stop)
         except SSH.Error, e:
             self.status("ssh error: " + str(e))
@@ -428,6 +446,7 @@ def main():
     opt_timeout = None
     opt_resume = None
     opt_workers = None
+    opt_user = None
 
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
@@ -436,6 +455,7 @@ def main():
                                          'pre=',
                                          'post=',
                                          'timeout=',
+                                         'user=',
                                          'split=',
                                          'sessions=',
                                          'resume=',
@@ -462,6 +482,10 @@ def main():
 
         if opt == '--timeout':
             opt_timeout = float(val)
+
+        if opt == '--user':
+            opt_user = val
+
 
         if opt == '--split':
             opt_split = int(val)
@@ -525,7 +549,8 @@ def main():
     taskconf = TaskConf(overlay=opt_overlay,
                         pre=opt_pre,
                         post=opt_post,
-                        timeout=opt_timeout)
+                        timeout=opt_timeout,
+                        user=opt_user)
 
     print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
