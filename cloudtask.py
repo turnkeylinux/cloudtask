@@ -312,11 +312,14 @@ class CloudWorker:
             if ssh_command.running and timeout.expired():
                 ssh_command.terminate()
                 self.status("timeout %d # %s" % (timeout.seconds, command))
+                return
 
             if read_timeout.expired():
                 if not self.ssh.is_alive():
-                    self.status("worker is not alive")
-                    raise Parallelize.Worker.Terminated
+                    ssh_command.terminate()
+                    self.status("worker died # %s" % command)
+                    raise SSH.Command.TimeoutError
+
                 read_timeout.reset()
 
             self.handle_stop()
@@ -544,7 +547,7 @@ def main():
         executor.join()
 
     except Exception, e:
-        print >> session.mlog, str(e)
+        traceback.print_exc(file=session.mlog)
 
         if executor:
             executor.stop()
@@ -567,9 +570,12 @@ def main():
     succeeded = exitcodes.count(0)
     failed = len(exitcodes) - succeeded
 
-    print >> session.mlog, "session %d: %d commands in %d seconds (%d succeeded, %d failed)" % \
+    print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
                             (session.id, len(exitcodes), session.elapsed, succeeded, failed)
 
+    if session.jobs.pending:
+        print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
+        sys.exit(1)
 
 if __name__ == "__main__":
     main()
