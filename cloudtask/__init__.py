@@ -1,1 +1,1 @@
-from cloudtask import main
+from cloudtask import main, Task

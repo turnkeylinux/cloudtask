@@ -67,9 +67,6 @@ class TaskConf(AttrDict):
         self.post = post
         self.timeout = timeout
 
-        if user is None:
-            user = 'root'
-
         self.user = user
 
 def error(e):
@@ -85,173 +82,199 @@ def usage(e=None):
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
-def main():
-    opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
-                                  join(os.environ['HOME'], '.cloudtask', 'sessions'))
+class Task:
+    USER = 'root'
 
-    opt_pre = None
-    opt_post = None
-    opt_overlay = None
-    opt_split = None
-    opt_timeout = None
-    opt_resume = None
-    opt_workers = None
-    opt_user = None
+    COMMAND = None
+    PRE = None
+    POST = None
+    OVERLAY = None
+    SPLIT = None
+    TIMEOUT = None
+    WORKERS = None
 
-    try:
-        opts, args = getopt.getopt(sys.argv[1:], 
-                                   'h', ['help', 
-                                         'overlay=',
-                                         'pre=',
-                                         'post=',
-                                         'timeout=',
-                                         'user=',
-                                         'split=',
-                                         'sessions=',
-                                         'resume=',
-                                         'workers=',
-                                         ])
-    except getopt.GetoptError, e:
-        usage(e)
+    @classmethod
+    def main(cls):
+        opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
+                                      join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
-    for opt, val in opts:
-        if opt in ('-h', '--help'):
-            usage()
+        opt_pre = cls.PRE
+        opt_post = cls.POST
+        opt_overlay = cls.OVERLAY
+        opt_split = cls.SPLIT
+        opt_timeout = cls.TIMEOUT
+        opt_workers = cls.WORKERS
+        opt_user = cls.USER
 
-        if opt == '--pre':
-            opt_pre = val
+        opt_resume = None
 
-        if opt == '--post':
-            opt_post = val
+        try:
+            opts, args = getopt.getopt(sys.argv[1:], 
+                                       'h', ['help', 
+                                             'overlay=',
+                                             'pre=',
+                                             'post=',
+                                             'timeout=',
+                                             'user=',
+                                             'split=',
+                                             'sessions=',
+                                             'resume=',
+                                             'workers=',
+                                             ])
+        except getopt.GetoptError, e:
+            usage(e)
 
-        if opt == '--overlay':
-            if not isdir(val):
-                usage("overlay '%s' not a directory" % val)
+        for opt, val in opts:
+            if opt in ('-h', '--help'):
+                usage()
 
-            opt_overlay = val
+            if opt == '--pre':
+                opt_pre = val
 
-        if opt == '--timeout':
-            opt_timeout = float(val)
+            if opt == '--post':
+                opt_post = val
 
-        if opt == '--user':
-            opt_user = val
+            if opt == '--overlay':
+                if not isdir(val):
+                    usage("overlay '%s' not a directory" % val)
+
+                opt_overlay = val
+
+            if opt == '--timeout':
+                opt_timeout = float(val)
+
+            if opt == '--user':
+                opt_user = val
 
 
-        if opt == '--split':
-            opt_split = int(val)
-            if opt_split < 1:
-                usage("bad --split value '%s'" % val)
+            if opt == '--split':
+                opt_split = int(val)
+                if opt_split < 1:
+                    usage("bad --split value '%s'" % val)
 
-            if opt_split == 1:
-                opt_split = None
+                if opt_split == 1:
+                    opt_split = None
 
-        if opt == '--sessions':
-            opt_sessions = val
+            if opt == '--sessions':
+                opt_sessions = val
 
-        if opt == '--workers':
-            if isfile(val):
-                opt_workers = file(val).read().splitlines()
+            if opt == '--workers':
+                opt_workers = val
+
+            if opt == '--resume':
+                try:
+                    opt_resume = int(val)
+                except ValueError:
+                    usage("--resume session id must be an integer")
+
+
+        if opt_workers:
+            if isinstance(opt_workers, str):
+                if isfile(opt_workers):
+                    opt_workers = file(opt_workers).read().splitlines()
+                else:
+                    opt_workers = [ worker.strip() for worker in opt_workers.split(',') ]
             else:
-                opt_workers = [ worker.strip() for worker in val.split(',') ]
+                opt_workers = list(opt_workers)
 
-        if opt == '--resume':
-            try:
-                opt_resume = int(val)
-            except ValueError:
-                usage("--resume session id must be an integer")
-
-
-    if not args:
-        usage()
-
-    command = args
-
-    if len(command) == 1:
-        if len(shlex.split(command[0])) > 1:
-            command = command[0]
-
-    if opt_resume:
-        if command:
-            usage("--resume incompatible with a command")
-
-        session = Session(opt_sessions, opt_split, id=opt_resume)
-        jobs = session.jobs.pending
-
-        if not jobs:
-            print "session %d finished" % session.id
-            sys.exit(0)
+        if cls.COMMAND:
+            command = [ cls.COMMAND ] + args
         else:
-            print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
+            if not args:
+                usage()
 
-    else:
-        session = Session(opt_sessions, opt_split)
-        jobs = []
-        for line in sys.stdin.readlines():
-            args = shlex.split(line)
+            command = args
 
-            if isinstance(command, str):
-                job = command + ' ' + fmt_argv(args)
+        if len(command) == 1:
+            # treat command as a string if it looks complex
+            if len(shlex.split(command[0])) > 1:
+                command = command[0]
+
+        if opt_resume:
+            if command:
+                usage("--resume incompatible with a command")
+
+            session = Session(opt_sessions, opt_split, id=opt_resume)
+            jobs = session.jobs.pending
+
+            if not jobs:
+                print "session %d finished" % session.id
+                sys.exit(0)
             else:
-                job = fmt_argv(command + args)
+                print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
 
-            jobs.append(job)
-
-    taskconf = TaskConf(overlay=opt_overlay,
-                        pre=opt_pre,
-                        post=opt_post,
-                        timeout=opt_timeout,
-                        user=opt_user)
-
-    print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
-
-    def terminate(sig, f):
-        signal.signal(sig, signal.SIG_IGN)
-        raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
-
-    signal.signal(signal.SIGINT, terminate)
-    signal.signal(signal.SIGTERM, terminate)
-
-    executor = None
-
-    try:
-        executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
-
-        for job in jobs:
-            executor(job)
-
-        executor.join()
-
-    except Exception, e:
-        if not isinstance(e, CloudWorker.Error):
-            traceback.print_exc(file=session.mlog)
-
-        if executor:
-            executor.stop()
-            results = executor.results
         else:
-            results = []
+            session = Session(opt_sessions, opt_split)
+            jobs = []
+            for line in sys.stdin.readlines():
+                args = shlex.split(line)
 
-        session.jobs.update(jobs, results)
-        print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
-                                (session.id, 
-                                 len(session.jobs.finished), 
-                                 len(session.jobs.pending))
+                if isinstance(command, str):
+                    job = command + ' ' + fmt_argv(args)
+                else:
+                    job = fmt_argv(command + args)
 
-        sys.exit(1)
+                jobs.append(job)
 
-    session.jobs.update(jobs, executor.results)
+        taskconf = TaskConf(overlay=opt_overlay,
+                            pre=opt_pre,
+                            post=opt_post,
+                            timeout=opt_timeout,
+                            user=opt_user)
 
-    exitcodes = [ exitcode for command, exitcode in executor.results ]
+        print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
-    succeeded = exitcodes.count(0)
-    failed = len(exitcodes) - succeeded
+        def terminate(sig, f):
+            signal.signal(sig, signal.SIG_IGN)
+            raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
 
-    print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
-                            (session.id, len(exitcodes), session.elapsed, succeeded, failed)
+        signal.signal(signal.SIGINT, terminate)
+        signal.signal(signal.SIGTERM, terminate)
 
-    if session.jobs.pending:
-        print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
-        sys.exit(1)
+        executor = None
+
+        try:
+            executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
+
+            for job in jobs:
+                executor(job)
+
+            executor.join()
+
+        except Exception, e:
+            if not isinstance(e, CloudWorker.Error):
+                traceback.print_exc(file=session.mlog)
+
+            if executor:
+                executor.stop()
+                results = executor.results
+            else:
+                results = []
+
+            session.jobs.update(jobs, results)
+            print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
+                                    (session.id, 
+                                     len(session.jobs.finished), 
+                                     len(session.jobs.pending))
+
+            sys.exit(1)
+
+        session.jobs.update(jobs, executor.results)
+
+        exitcodes = [ exitcode for command, exitcode in executor.results ]
+
+        succeeded = exitcodes.count(0)
+        failed = len(exitcodes) - succeeded
+
+        print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
+                                (session.id, len(exitcodes), session.elapsed, succeeded, failed)
+
+        if session.jobs.pending:
+            print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
+            sys.exit(1)
+
+main = Task.main
 
 if __name__ == "__main__":
     main()
+
