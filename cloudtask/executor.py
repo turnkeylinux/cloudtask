@@ -10,7 +10,6 @@ from multiprocessing_utils import Parallelize, Deferred
 from ssh import SSH
 import hub
 
-
 class Timeout:
     def __init__(self, seconds=None):
         """If seconds is None, timeout never expires"""

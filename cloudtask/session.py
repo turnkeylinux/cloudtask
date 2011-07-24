@@ -41,7 +41,7 @@ class Session:
         pass
 
     class Paths(Paths):
-        files = ['workers', 'log', 'jobs']
+        files = ['conf', 'workers', 'log', 'jobs']
 
     class Jobs:
         def __init__(self, path):
@@ -105,8 +105,8 @@ class Session:
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
 
-
-    def __init__(self, sessions_path, opt_split, id=None):
+    def __init__(self, taskconf, id=None):
+        sessions_path = taskconf.sessions
         if not exists(sessions_path):
             makedirs(sessions_path)
 
@@ -135,10 +135,11 @@ class Session:
 
         if new_session:
             makedirs(path)
+            taskconf.save(self.paths.conf)
 
         self.jobs = self.Jobs(self.paths.jobs)
 
-        if opt_split:
+        if taskconf.split:
             makedirs(self.paths.workers)
             self.wlog = self.WorkerLog(self.paths.workers)
             self.mlog = self.ManagerLog(self.paths.log)
@@ -149,6 +150,8 @@ class Session:
 
         self.started = time.time()
         self.key = TempSessionKey()
+
+        self.taskconf = taskconf
 
     @property
     def elapsed(self):

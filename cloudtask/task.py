@@ -59,6 +59,8 @@ from session import Session
 from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
+import pprint
+
 class TaskConf:
     sessions = join(os.environ['HOME'], '.cloudtask')
     user = 'root'
@@ -75,7 +77,7 @@ class TaskConf:
     workers = None
 
     __all__ = [ attr for attr in dir() if not attr.startswith("_") ]
-    
+
     def __getitem__(self, name):
         return getattr(self, name)
 
@@ -83,10 +85,27 @@ class TaskConf:
         return setattr(self, name, val)
 
     def __repr__(self):
+        return `self.dict()`
+
+    def dict(self):
         d = {}
         for attr in self.__all__:
             d[attr] = getattr(self, attr)
-        return `d`
+        return d
+
+    @classmethod
+    def fromdict(cls, d):
+        taskconf = cls()
+        for attr in d:
+            taskconf[attr] = d[attr]
+        return taskconf
+
+    def save(self, path):
+        print >> file(path, "w"), pprint.pformat(self.dict())
+
+    @classmethod
+    def load(cls, path):
+        return cls.fromdict(eval(file(path).read()))
 
 class Task:
 
@@ -185,7 +204,7 @@ class Task:
             if command:
                 usage("--resume incompatible with a command")
 
-            session = Session(taskconf.sessions, taskconf.split, id=opt_resume)
+            session = Session(taskconf, id=opt_resume)
             jobs = session.jobs.pending
 
             if not jobs:
@@ -198,7 +217,7 @@ class Task:
             if os.isatty(sys.stdin.fileno()):
                 usage()
 
-            session = Session(taskconf.sessions, taskconf.split)
+            session = Session(taskconf)
             jobs = []
             for line in sys.stdin.readlines():
                 args = shlex.split(line)
