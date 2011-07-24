@@ -1,3 +1,4 @@
+from os.path import *
 from command import Command, fmt_argv
 
 class SSH:
@@ -112,6 +113,9 @@ class SSH:
             raise self.Error("can't remove id from authorized-keys: " + str(e))
 
     def apply_overlay(self, overlay_path):
+        if not isdir(overlay_path):
+            raise self.Error("overlay path '%s' is not a directory" % overlay_path)
+
         ssh_command = " ".join(self.Command.argv(self.identity_file, 
                                                  self.login_name))
         argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
