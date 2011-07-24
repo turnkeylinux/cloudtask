@@ -129,6 +129,12 @@ class Task:
             for attr in taskconf.__all__:
                 taskconf[attr] = getattr(cls, attr.upper())
 
+            if taskconf.overlay and not taskconf.overlay.startswith('/'):
+                relative_to = (os.getcwd() if not cls.OVERLAY 
+                               else abspath(dirname(sys.argv[0])))
+
+                taskconf.overlay = join(relative_to, taskconf.overlay)
+
         for opt, val in opts:
             if opt in ('--resume', '--sessions'):
                 continue
@@ -137,7 +143,7 @@ class Task:
                 if not isdir(val):
                     usage("overlay '%s' not a directory" % val)
 
-                taskconf.overlay = val
+                taskconf.overlay = abspath(val)
 
             elif opt == '--timeout':
                 taskconf.timeout = int(val)
