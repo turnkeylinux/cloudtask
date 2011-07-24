@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """
-Execute tasks in the cloud
+Execute commands in the cloud
 
 Options:
 
@@ -69,18 +69,6 @@ class TaskConf(AttrDict):
 
         self.user = user
 
-def error(e):
-    print >> sys.stderr, "error: " + str(e)
-    sys.exit(1)
-
-def usage(e=None):
-    if e:
-        print >> sys.stderr, "error: " + str(e)
-
-    print >> sys.stderr, "syntax: %s [ -opts ] [ command ]" % sys.argv[0]
-    print >> sys.stderr, "syntax: %s [ -opts ] --resume=SESSION_ID" % sys.argv[0]
-    print >> sys.stderr, __doc__.strip()
-    sys.exit(1)
 
 class Task:
     USER = 'root'
@@ -93,8 +81,31 @@ class Task:
     TIMEOUT = None
     WORKERS = None
 
+    DESCRIPTION = None
+
+    @classmethod
+    def usage(cls, e=None):
+        if e:
+            print >> sys.stderr, "error: " + str(e)
+
+        if not cls.COMMAND:
+            print >> sys.stderr, "syntax: %s [ -opts ] [ command ]" % sys.argv[0]
+        else:
+            print >> sys.stderr, "syntax: %s [ -opts ] [ extra args ]" % sys.argv[0]
+
+        print >> sys.stderr, "syntax: %s [ -opts ] --resume=SESSION_ID" % sys.argv[0]
+        if cls.DESCRIPTION:
+            print >> sys.stderr, cls.DESCRIPTION.strip()
+            print >> sys.stderr, "\n".join(__doc__.strip().splitlines()[1:])
+        else:
+            print >> sys.stderr, __doc__.strip()
+
+        sys.exit(1)
+
     @classmethod
     def main(cls):
+        usage = cls.usage
+
         opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
                                       join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
@@ -204,6 +215,9 @@ class Task:
                 print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
 
         else:
+            if os.isatty(sys.stdin.fileno()):
+                usage()
+
             session = Session(opt_sessions, opt_split)
             jobs = []
             for line in sys.stdin.readlines():
