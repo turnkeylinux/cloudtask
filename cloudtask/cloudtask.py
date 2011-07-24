@@ -59,43 +59,35 @@ from session import Session
 from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
-class SigTerminate(Exception):
-    def __init__(self, msg, sig):
-        self.sig = sig
-        Exception.__init__(self, msg)
+class TaskConf:
+    user = 'root'
 
-class AttrDict(dict):
-    def __getattr__(self, name):
-        if name in self:
-            return self[name]
-        raise AttributeError("no such attribute '%s'" % name)
+    pre = None
+    post = None
+    overlay = None
 
-    def __setattr__(self, name, val):
-        self[name] = val
+    apikey = None
+    command = None
+    timeout = None
 
-class TaskConf(AttrDict):
-    def __init__(self, apikey=None, command=None, overlay=None, pre=None, post=None, timeout=None, user=None):
+    split = None
+    workers = None
 
-        self.apikey = apikey
-        self.command = command
-        self.overlay = overlay
-        self.pre = pre
-        self.post = post
-        self.timeout = timeout
+    __all__ = [ attr for attr in dir() if not attr.startswith("_") ]
+    
+    def __getitem__(self, name):
+        return getattr(self, name)
 
-        self.user = user
+    def __setitem__(self, name, val):
+        return setattr(self, name, val)
 
+    def __repr__(self):
+        d = {}
+        for attr in self.__all__:
+            d[attr] = getattr(self, attr)
+        return `d`
 
 class Task:
-    USER = os.environ.get('CLOUDTASK_USER', 'root')
-
-    COMMAND = os.environ.get('CLOUDTASK_COMMAND')
-    PRE = os.environ.get('CLOUDTASK_PRE')
-    POST = os.environ.get('CLOUDTASK_POST')
-    OVERLAY = os.environ.get('CLOUDTASK_OVERLAY')
-    SPLIT = os.environ.get('CLOUDTASK_SPLIT')
-    TIMEOUT = os.environ.get('CLOUDTASK_TIMEOUT')
-    WORKERS = os.environ.get('CLOUDTASK_WORKERS')
 
     DESCRIPTION = None
 
@@ -122,32 +114,22 @@ class Task:
     def main(cls):
         usage = cls.usage
 
-        opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
-                                      join(os.environ['HOME'], '.cloudtask', 'sessions'))
-
-        opt_pre = cls.PRE
-        opt_post = cls.POST
-        opt_overlay = cls.OVERLAY
-        opt_split = cls.SPLIT
-        opt_timeout = cls.TIMEOUT
-        opt_workers = cls.WORKERS
-        opt_user = cls.USER
+        # allow taskconf values to be overwritten from inherited classes
+        taskconf = TaskConf()
+        for attr in taskconf.__all__:
+            taskconf[attr] = getattr(cls, attr.upper())
 
         opt_resume = None
+        opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
+                                      join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
                                        'h', ['help', 
-                                             'overlay=',
-                                             'pre=',
-                                             'post=',
-                                             'timeout=',
-                                             'user=',
-                                             'split=',
                                              'sessions=',
-                                             'resume=',
-                                             'workers=',
-                                             ])
+                                             'resume=' ] +
+                                            [ attr + '=' 
+                                              for attr in taskconf.__all__ ])
         except getopt.GetoptError, e:
             usage(e)
 
@@ -155,67 +137,48 @@ class Task:
             if opt in ('-h', '--help'):
                 usage()
 
-            if opt == '--pre':
-                opt_pre = val
-
-            if opt == '--post':
-                opt_post = val
-
-            if opt == '--overlay':
-                if not isdir(val):
-                    usage("overlay '%s' not a directory" % val)
-
-                opt_overlay = val
-
-            if opt == '--timeout':
-                opt_timeout = float(val)
-
-            if opt == '--user':
-                opt_user = val
-
-
-            if opt == '--split':
-                opt_split = int(val)
-                if opt_split < 1:
-                    usage("bad --split value '%s'" % val)
-
-                if opt_split == 1:
-                    opt_split = None
-
-            if opt == '--sessions':
+            elif opt == '--sessions':
                 opt_sessions = val
 
-            if opt == '--workers':
-                opt_workers = val
-
-            if opt == '--resume':
+            elif opt == '--resume':
                 try:
                     opt_resume = int(val)
                 except ValueError:
                     usage("--resume session id must be an integer")
 
+            elif opt == '--overlay':
+                if not isdir(val):
+                    usage("overlay '%s' not a directory" % val)
 
-        if opt_workers:
-            if isinstance(opt_workers, str):
-                if isfile(opt_workers):
-                    opt_workers = file(opt_workers).read().splitlines()
-                else:
-                    opt_workers = [ worker.strip() for worker in opt_workers.split(',') ]
+                taskconf.overlay = val
+
+            elif opt == '--timeout':
+                taskconf.timeout = float(val)
+
+            elif opt == '--split':
+                taskconf.split = int(val)
+                if taskconf.split < 1:
+                    usage("bad --split value '%s'" % val)
+
+                if taskconf.split == 1:
+                    taskconf.split = None
+
             else:
-                opt_workers = list(opt_workers)
+                opt = opt[2:]
+                taskconf[opt] = val
 
-        taskconf = TaskConf(overlay=opt_overlay,
-                            pre=opt_pre,
-                            post=opt_post,
-                            timeout=opt_timeout,
-                            user=opt_user)
+        if taskconf.workers:
+            if isinstance(taskconf.workers, str):
+                if isfile(taskconf.workers):
+                    taskconf.workers = file(taskconf.workers).read().splitlines()
+                else:
+                    taskconf.workers = [ worker.strip() for worker in taskconf.workers.split(',') ]
+            else:
+                taskconf.workers = list(taskconf.workers)
 
         if cls.COMMAND:
             command = [ cls.COMMAND ] + args
         else:
-            if not args:
-                usage()
-
             command = args
 
         if len(command) == 1:
@@ -227,7 +190,7 @@ class Task:
             if command:
                 usage("--resume incompatible with a command")
 
-            session = Session(opt_sessions, opt_split, id=opt_resume)
+            session = Session(opt_sessions, taskconf.split, id=opt_resume)
             jobs = session.jobs.pending
 
             if not jobs:
@@ -240,7 +203,7 @@ class Task:
             if os.isatty(sys.stdin.fileno()):
                 usage()
 
-            session = Session(opt_sessions, opt_split)
+            session = Session(opt_sessions, taskconf.split)
             jobs = []
             for line in sys.stdin.readlines():
                 args = shlex.split(line)
@@ -256,7 +219,7 @@ class Task:
 
         def terminate(sig, f):
             signal.signal(sig, signal.SIG_IGN)
-            raise SigTerminate("caught signal (%d) to terminate" % sig, sig)
+            raise CloudWorker.Terminated("caught signal (%d) to terminate" % sig, sig)
 
         signal.signal(signal.SIGINT, terminate)
         signal.signal(signal.SIGTERM, terminate)
@@ -264,8 +227,7 @@ class Task:
         executor = None
 
         try:
-            executor = CloudExecutor(session, taskconf, opt_split, opt_workers)
-
+            executor = CloudExecutor(session, taskconf)
             for job in jobs:
                 executor(job)
 
@@ -302,6 +264,13 @@ class Task:
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
             sys.exit(1)
+
+# set default class values to TaskConf defaults
+for attr in TaskConf.__all__:
+    setattr(Task, 
+            attr.upper(), 
+            os.environ.get('CLOUDTASK_' + attr.upper(), 
+                           getattr(TaskConf, attr)))
 
 main = Task.main
 

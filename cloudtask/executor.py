@@ -26,6 +26,8 @@ class Timeout:
         self.started = time.time()
 
 class CloudWorker:
+    Terminated = Parallelize.Worker.Terminated
+
     class Error(Exception):
         pass
 
@@ -119,7 +121,7 @@ class CloudWorker:
             return
 
         if self.event_stop.is_set():
-            raise Parallelize.Worker.Terminated
+            raise self.Terminated
 
     def __call__(self, command):
         timeout = self.timeout
@@ -156,7 +158,7 @@ class CloudWorker:
             out = ssh_command.read(handler)
 
         # SigTerminate raised in serial mode, the other in Parallelized mode
-        except (SigTerminate, Parallelize.Worker.Terminated):
+        except self.Terminated:
             ssh_command.terminate()
             self.status("terminated # %s" % command)
             raise
@@ -182,10 +184,12 @@ class CloudExecutor:
     class Error(Exception):
         pass
 
-    def __init__(self, session, taskconf, split=None, addresses=[]):
+    def __init__(self, session, taskconf):
         self.session = session
         self.taskconf = taskconf
-        self.split = split
+
+        split = taskconf.split
+        addresses = taskconf.workers
 
         if not split:
             if addresses:
@@ -215,11 +219,11 @@ class CloudExecutor:
 
     def __call__(self, job):
         result = self._execute(job)
-        if not self.split:
+        if not self.taskconf.split:
             self.results.append(result)
 
     def stop(self):
-        if not self.split:
+        if not self.taskconf.split:
             return
 
         self.event_stop.set()
@@ -227,7 +231,7 @@ class CloudExecutor:
         self._execute.stop()
 
     def join(self):
-        if self.split:
+        if self.taskconf.split:
             self._execute.wait()
             self._execute.stop()
 
