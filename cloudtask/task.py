@@ -135,10 +135,7 @@ class Task:
                 taskconf[attr] = getattr(cls, attr.upper())
 
             if taskconf.overlay and not taskconf.overlay.startswith('/'):
-                relative_to = (os.getcwd() if not cls.OVERLAY 
-                               else abspath(dirname(sys.argv[0])))
-
-                taskconf.overlay = join(relative_to, taskconf.overlay)
+                taskconf.overlay = abspath(join(dirname(sys.argv[0]), taskconf.overlay))
 
         for opt, val in opts:
             if opt in ('--resume', '--sessions'):
