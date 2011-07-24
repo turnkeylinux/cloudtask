@@ -34,7 +34,7 @@ Options:
 
     --sessions=PATH          Path to location where sessions are stored
                              environment: CLOUDTASK_SESSIONS
-                             default: $HOME/.cloudtask/sessions
+                             default: $HOME/.cloudtask/
 
     --resume=ID              Resume session
 
@@ -60,6 +60,7 @@ from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
 class TaskConf:
+    sessions = join(os.environ['HOME'], '.cloudtask')
     user = 'root'
 
     pre = None
@@ -120,13 +121,10 @@ class Task:
             taskconf[attr] = getattr(cls, attr.upper())
 
         opt_resume = None
-        opt_sessions = os.environ.get('CLOUDTASK_SESSIONS', 
-                                      join(os.environ['HOME'], '.cloudtask', 'sessions'))
 
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
                                        'h', ['help', 
-                                             'sessions=',
                                              'resume=' ] +
                                             [ attr + '=' 
                                               for attr in taskconf.__all__ ])
@@ -136,9 +134,6 @@ class Task:
         for opt, val in opts:
             if opt in ('-h', '--help'):
                 usage()
-
-            elif opt == '--sessions':
-                opt_sessions = val
 
             elif opt == '--resume':
                 try:
@@ -190,7 +185,7 @@ class Task:
             if command:
                 usage("--resume incompatible with a command")
 
-            session = Session(opt_sessions, taskconf.split, id=opt_resume)
+            session = Session(taskconf.sessions, taskconf.split, id=opt_resume)
             jobs = session.jobs.pending
 
             if not jobs:
@@ -203,7 +198,7 @@ class Task:
             if os.isatty(sys.stdin.fileno()):
                 usage()
 
-            session = Session(opt_sessions, taskconf.split)
+            session = Session(taskconf.sessions, taskconf.split)
             jobs = []
             for line in sys.stdin.readlines():
                 args = shlex.split(line)
