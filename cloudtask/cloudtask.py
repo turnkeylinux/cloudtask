@@ -2,20 +2,36 @@
 """
 Execute commands in the cloud
 
+Resolution order for options:
+1) command line (highest precedence)
+2) task-level default
+3) environment variable (lowest precedence)
+
 Options:
 
     --user=USERNAME          Username to execute commands as (default: root)
+                             environment: CLOUDTASK_USER
                 
     --pre=COMMAND            Worker setup command
+                             environment: CLOUDTASK_PRE
+
     --post=COMMAND           Worker cleanup command
+                             environment: CLOUDTASK_POST
 
     --overlay=PATH           Path to worker filesystem overlay
+                             environment: CLOUDTASK_OVERLAY
+
     --workers=<workers>      List of pre-launched workers to use
+                             environment: CLOUDTASK_WORKERS
         
         <workers> := path/to/file | host1,host2,...hostN
 
     --timeout=SECS           How long to wait before giving up
+                             environment: CLOUDTASK_TIMEOUT
+
     --split=N                How many processes to execute in parallel
+                             environment: CLOUDTASK_SPLIT
+
     --sessions=PATH          Path to location where sessions are stored
                              environment: CLOUDTASK_SESSIONS
                              default: $HOME/.cloudtask/sessions
@@ -71,15 +87,15 @@ class TaskConf(AttrDict):
 
 
 class Task:
-    USER = 'root'
+    USER = os.environ.get('CLOUDTASK_USER', 'root')
 
-    COMMAND = None
-    PRE = None
-    POST = None
-    OVERLAY = None
-    SPLIT = None
-    TIMEOUT = None
-    WORKERS = None
+    COMMAND = os.environ.get('CLOUDTASK_COMMAND')
+    PRE = os.environ.get('CLOUDTASK_PRE')
+    POST = os.environ.get('CLOUDTASK_POST')
+    OVERLAY = os.environ.get('CLOUDTASK_OVERLAY')
+    SPLIT = os.environ.get('CLOUDTASK_SPLIT')
+    TIMEOUT = os.environ.get('CLOUDTASK_TIMEOUT')
+    WORKERS = os.environ.get('CLOUDTASK_WORKERS')
 
     DESCRIPTION = None
 
@@ -188,6 +204,12 @@ class Task:
             else:
                 opt_workers = list(opt_workers)
 
+        taskconf = TaskConf(overlay=opt_overlay,
+                            pre=opt_pre,
+                            post=opt_post,
+                            timeout=opt_timeout,
+                            user=opt_user)
+
         if cls.COMMAND:
             command = [ cls.COMMAND ] + args
         else:
@@ -229,12 +251,6 @@ class Task:
                     job = fmt_argv(command + args)
 
                 jobs.append(job)
-
-        taskconf = TaskConf(overlay=opt_overlay,
-                            pre=opt_pre,
-                            post=opt_post,
-                            timeout=opt_timeout,
-                            user=opt_user)
 
         print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
