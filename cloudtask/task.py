@@ -103,6 +103,9 @@ class Task:
 
         if cls.SESSIONS:
             opt_sessions = cls.SESSIONS
+            if not opt_sessions.startswith('/'):
+                opt_sessions = join(dirname(sys.argv[0]), opt_sessions)
+
         else:
             opt_sessions = os.environ.get('CLOUDTASK_SESSIONS',
                                           join(os.environ['HOME'], '.cloudtask'))
