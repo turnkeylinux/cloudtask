@@ -84,4 +84,4 @@ uninstall:
 	  rm -f $(PATH_BIN)/$(call subcommand, $$module))
 
 clean:
-	rm -f *.pyc *.pyo
+	rm -f {,*/}*.py[co]

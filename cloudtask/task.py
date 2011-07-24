@@ -64,7 +64,7 @@ from taskconf import TaskConf
 class Task:
 
     DESCRIPTION = None
-    SESSIONS = join(os.environ['HOME'], '.cloudtask')
+    SESSIONS = None
 
     @classmethod
     def usage(cls, e=None):
@@ -100,7 +100,12 @@ class Task:
             usage(e)
 
         opt_resume = None
-        opt_sessions = cls.SESSIONS
+
+        if cls.SESSIONS:
+            opt_sessions = cls.SESSIONS
+        else:
+            opt_sessions = os.environ.get('CLOUDTASK_SESSIONS',
+                                          join(os.environ['HOME'], '.cloudtask'))
 
         for opt, val in opts:
             if opt in ('-h', '--help'):
