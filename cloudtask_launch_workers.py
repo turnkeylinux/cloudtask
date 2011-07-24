@@ -61,7 +61,7 @@ def main():
         'label': "",
     }
 
-    opt_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
+    apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
@@ -76,23 +76,35 @@ def main():
             usage()
 
         if opt == '--apikey':
-            opt_apikey = val
+            apikey = val
 
         for key in kwargs:
             if opt == '--' + key:
                 kwargs[key] = val
                 break
 
-    if not opt_apikey:
+    if not apikey:
         fatal("missing required APIKEY")
 
     if len(args) < 2:
         usage()
 
-    howmany = args[1]
+    howmany, output = args
 
-    print `opt_apikey`
-    print `kwargs`
+    try:
+        howmany = int(howmany)
+        if howmany < 1:
+            raise ValueError
+    except ValueError:
+        usage("illegal howmany value '%s'" % howmany)
+
+    if output == '-':
+        output = sys.stdout
+    else:
+        output = file(output, "a")
+
+    for address in hub.launch(apikey, howmany, **kwargs):
+        print >> output, address
 
 if __name__ == "__main__":
     main()
