@@ -59,57 +59,12 @@ from session import Session
 from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
-import pprint
-
-class TaskConf:
-    sessions = join(os.environ['HOME'], '.cloudtask')
-    user = 'root'
-
-    pre = None
-    post = None
-    overlay = None
-
-    apikey = None
-    command = None
-    timeout = None
-
-    split = None
-    workers = None
-
-    __all__ = [ attr for attr in dir() if not attr.startswith("_") ]
-
-    def __getitem__(self, name):
-        return getattr(self, name)
-
-    def __setitem__(self, name, val):
-        return setattr(self, name, val)
-
-    def __repr__(self):
-        return `self.dict()`
-
-    def dict(self):
-        d = {}
-        for attr in self.__all__:
-            d[attr] = getattr(self, attr)
-        return d
-
-    @classmethod
-    def fromdict(cls, d):
-        taskconf = cls()
-        for attr in d:
-            taskconf[attr] = d[attr]
-        return taskconf
-
-    def save(self, path):
-        print >> file(path, "w"), pprint.pformat(self.dict())
-
-    @classmethod
-    def load(cls, path):
-        return cls.fromdict(eval(file(path).read()))
+from taskconf import TaskConf
 
 class Task:
 
     DESCRIPTION = None
+    SESSIONS = join(os.environ['HOME'], '.cloudtask')
 
     @classmethod
     def usage(cls, e=None):
@@ -134,21 +89,18 @@ class Task:
     def main(cls):
         usage = cls.usage
 
-        # allow taskconf values to be overwritten from inherited classes
-        taskconf = TaskConf()
-        for attr in taskconf.__all__:
-            taskconf[attr] = getattr(cls, attr.upper())
-
-        opt_resume = None
-
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
                                        'h', ['help', 
-                                             'resume=' ] +
+                                             'resume=',
+                                             'sessions='] +
                                             [ attr + '=' 
-                                              for attr in taskconf.__all__ ])
+                                              for attr in TaskConf.__all__ ])
         except getopt.GetoptError, e:
             usage(e)
+
+        opt_resume = None
+        opt_sessions = cls.SESSIONS
 
         for opt, val in opts:
             if opt in ('-h', '--help'):
@@ -160,14 +112,35 @@ class Task:
                 except ValueError:
                     usage("--resume session id must be an integer")
 
-            elif opt == '--overlay':
+            elif opt == '--sessions':
+                if not isdir(val):
+                    usage("--sessions path '%s' is not a directory" % val)
+
+                opt_sessions = val
+
+        if opt_resume:
+            session = Session(opt_sessions, id=opt_resume)
+            taskconf = session.taskconf
+        else:
+            session = None
+
+            # allow taskconf values to be overwritten from inherited classes
+            taskconf = TaskConf()
+            for attr in taskconf.__all__:
+                taskconf[attr] = getattr(cls, attr.upper())
+
+        for opt, val in opts:
+            if opt in ('--resume', '--sessions'):
+                continue
+
+            if opt == '--overlay':
                 if not isdir(val):
                     usage("overlay '%s' not a directory" % val)
 
                 taskconf.overlay = val
 
             elif opt == '--timeout':
-                taskconf.timeout = float(val)
+                taskconf.timeout = int(val)
 
             elif opt == '--split':
                 taskconf.split = int(val)
@@ -190,21 +163,10 @@ class Task:
             else:
                 taskconf.workers = list(taskconf.workers)
 
-        if cls.COMMAND:
-            command = [ cls.COMMAND ] + args
-        else:
-            command = args
-
-        if len(command) == 1:
-            # treat command as a string if it looks complex
-            if len(shlex.split(command[0])) > 1:
-                command = command[0]
-
         if opt_resume:
-            if command:
+            if args:
                 usage("--resume incompatible with a command")
 
-            session = Session(taskconf, id=opt_resume)
             jobs = session.jobs.pending
 
             if not jobs:
@@ -214,10 +176,21 @@ class Task:
                 print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
 
         else:
-            if os.isatty(sys.stdin.fileno()):
-                usage()
+            if cls.COMMAND:
+                command = [ cls.COMMAND ] + args
+            else:
+                command = args
 
-            session = Session(taskconf)
+            if len(command) == 1:
+                # treat command as a string if it looks complex
+                if len(shlex.split(command[0])) > 1:
+                    command = command[0]
+
+                if os.isatty(sys.stdin.fileno()):
+                    usage()
+
+            taskconf.command = command
+
             jobs = []
             for line in sys.stdin.readlines():
                 args = shlex.split(line)
@@ -228,6 +201,11 @@ class Task:
                     job = fmt_argv(command + args)
 
                 jobs.append(job)
+
+        if not session:
+            session = Session(opt_sessions)
+
+        session.taskconf = taskconf
 
         print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 

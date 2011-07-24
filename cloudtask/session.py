@@ -11,6 +11,9 @@ import uuid
 
 import executil
 
+from taskconf import TaskConf
+import pprint
+
 def makedirs(path):
     try:
         os.makedirs(path)
@@ -36,7 +39,10 @@ class TempSessionKey(TempFile):
 
         TempFile.__del__(self)
 
-class Session:
+class UNDEFINED:
+    pass
+
+class Session(object):
     class Error(Exception):
         pass
 
@@ -105,55 +111,82 @@ class Session:
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
 
-    def __init__(self, taskconf, id=None):
-        sessions_path = taskconf.sessions
+    def __init__(self, sessions_path, id=None):
         if not exists(sessions_path):
             makedirs(sessions_path)
 
         if not isdir(sessions_path):
             raise self.Error("sessions path is not a directory: " + sessions_path)
 
-        session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
-                        if fname.isdigit() ]
+        new_session = False
+        if not id:
+            new_session = True
 
-        new_session = False if id else True
-        if new_session:
+            session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
+                            if fname.isdigit() ]
+
             if session_ids:
                 new_session_id = max(map(int, session_ids)) + 1
             else:
                 new_session_id = 1
 
-            self.id = new_session_id
-        else:
-            if id not in session_ids:
-                raise self.Error("no such session '%s'" % `id`)
+            id = new_session_id
 
-            self.id = id
-
-        path = join(sessions_path, "%d" % self.id)
-        self.paths = Session.Paths(path)
+        path = join(sessions_path, "%d" % id)
 
         if new_session:
             makedirs(path)
-            taskconf.save(self.paths.conf)
+        else:
+            if not isdir(path):
+                raise Error("no such session '%s'" % id)
 
+        self.paths = Session.Paths(path)
         self.jobs = self.Jobs(self.paths.jobs)
 
-        if taskconf.split:
-            makedirs(self.paths.workers)
-            self.wlog = self.WorkerLog(self.paths.workers)
-            self.mlog = self.ManagerLog(self.paths.log)
-                     
-        else:
-            self.wlog = self.ManagerLog(self.paths.log)
-            self.mlog = self.wlog
+        self._wlog = None
+        self._mlog = None
 
         self.started = time.time()
         self.key = TempSessionKey()
 
-        self.taskconf = taskconf
+        self.id = id
+
+    def taskconf(self, val=UNDEFINED):
+        path = self.paths.conf
+
+        if val is UNDEFINED:
+            return TaskConf.fromdict(eval(file(path).read()))
+        else:
+            print >> file(path, "w"), pprint.pformat(val.dict())
+    taskconf = property(taskconf, taskconf)
 
     @property
     def elapsed(self):
         return time.time() - self.started 
 
+    @property
+    def wlog(self):
+        if self._wlog:
+            return self._wlog
+
+        if self.taskconf.split:
+            makedirs(self.paths.workers)
+            wlog = self.WorkerLog(self.paths.workers) 
+        else:
+            wlog = self.ManagerLog(self.paths.log)
+
+        self._wlog = wlog
+        return wlog
+
+    @property
+    def mlog(self):
+        if self._mlog:
+            return self._mlog
+
+        if self.taskconf.split:
+            mlog = self.ManagerLog(self.paths.log) 
+        else:
+            mlog = self.wlog
+
+        self._mlog = mlog
+        return mlog
