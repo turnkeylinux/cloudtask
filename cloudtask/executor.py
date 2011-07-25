@@ -8,7 +8,7 @@ from multiprocessing import Event
 from multiprocessing_utils import Parallelize, Deferred
 
 from ssh import SSH
-import _hub as hub
+from _hub import Hub
 
 class Timeout:
     def __init__(self, seconds=None):
@@ -57,14 +57,14 @@ class CloudWorker:
         self.address = address
 
         if not self.address:
-            self.address = hub.launch(taskconf.apikey, 1)[0]
+            self.address = Hub(taskconf.hub_apikey).launch(1)[0]
             self.status("hub launched worker")
         else:
             self.status("using existing worker")
 
         self.ssh = None
         try:
-            self.ssh = SSH(address, 
+            self.ssh = SSH(self.address, 
                            identity_file=self.session_key.path, 
                            login_name=taskconf.user,
                            callback=self.handle_stop)
@@ -177,7 +177,7 @@ class CloudWorker:
         self._cleanup()
 
         if self.destroy and self.address:
-            hub.destroy(self.taskconf.apikey, [ self.address ])
+            Hub(self.taskconf.hub_apikey).destroy([ self.address ])
 
 class CloudExecutor:
     class Error(Exception):

@@ -7,11 +7,15 @@ class TaskConf:
     post = None
     overlay = None
 
-    apikey = None
+    hub_apikey = None
     timeout = None
 
     split = None
-    workers = None
+    workers = []
+
+    ec2_region = 'us-east-1'
+    ec2_size = 'm1.small'
+    ec2_type = 's3'
 
     __all__ = [ attr for attr in dir() if not attr.startswith("_") ]
 

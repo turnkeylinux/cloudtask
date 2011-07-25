@@ -63,7 +63,7 @@ class SSH:
         self.callback = callback
 
         if not self.is_alive():
-            raise self.Error("%s is not alive " % address)
+            raise self.Error("%s is unreachable via ssh" % address)
 
     def is_alive(self, timeout=TIMEOUT):
         command = self.command('true')

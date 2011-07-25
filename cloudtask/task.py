@@ -9,7 +9,7 @@ Resolution order for options:
 
 Options:
 
-    --apikey=       Hub APIKEY
+    --hub-apikey=   Hub API KEY (required if launching workers)
                     environment: CLOUDTASK_APIKEY | HUB_APIKEY
 
     --ec2-region=   Region for instance launch (default: us-east-1)
@@ -79,6 +79,11 @@ class Task:
     DESCRIPTION = None
     SESSIONS = None
 
+    @staticmethod
+    def error(e=None):
+        print >> sys.stderr, "error: " + str(e)
+        sys.exit(1)
+
     @classmethod
     def usage(cls, e=None):
         if e:
@@ -101,6 +106,7 @@ class Task:
     @classmethod
     def main(cls):
         usage = cls.usage
+        error = cls.error
 
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
@@ -131,11 +137,11 @@ class Task:
                 try:
                     opt_resume = int(val)
                 except ValueError:
-                    usage("--resume session id must be an integer")
+                    error("--resume session id must be an integer")
 
             elif opt == '--sessions':
                 if not isdir(val):
-                    usage("--sessions path '%s' is not a directory" % val)
+                    error("--sessions path '%s' is not a directory" % val)
 
                 opt_sessions = val
 
@@ -150,6 +156,9 @@ class Task:
             for attr in taskconf.__all__:
                 taskconf[attr] = getattr(cls, attr.upper())
 
+            if not taskconf.hub_apikey:
+                taskconf.hub_apikey = os.environ.get('HUB_APIKEY')
+
             if taskconf.overlay and not taskconf.overlay.startswith('/'):
                 taskconf.overlay = abspath(join(dirname(sys.argv[0]), taskconf.overlay))
 
@@ -159,7 +168,7 @@ class Task:
 
             if opt == '--overlay':
                 if not isdir(val):
-                    usage("overlay '%s' not a directory" % val)
+                    error("overlay '%s' not a directory" % val)
 
                 taskconf.overlay = abspath(val)
 
@@ -169,7 +178,7 @@ class Task:
             elif opt == '--split':
                 taskconf.split = int(val)
                 if taskconf.split < 1:
-                    usage("bad --split value '%s'" % val)
+                    error("bad --split value '%s'" % val)
 
                 if taskconf.split == 1:
                     taskconf.split = None
@@ -187,9 +196,13 @@ class Task:
             else:
                 taskconf.workers = list(taskconf.workers)
 
+        split = taskconf.split if taskconf.split else 1
+        if len(taskconf.workers) < split and not taskconf.hub_apikey:
+            error("please provide a HUB APIKEY or more pre-launched workers")
+
         if opt_resume:
             if args:
-                usage("--resume incompatible with a command")
+                error("--resume incompatible with a command")
 
             jobs = session.jobs.pending
 
