@@ -1,68 +1,69 @@
-from hub import Hub
+from hub import Hub as _Hub
 import time
 
-LAUNCH_WAIT_FIRST = 0
-LAUNCH_WAIT_INTERVAL = 15
+class Hub:
+    #def __init__(self, apikey, wait_first=30, wait_interval=15):
+    def __init__(self, apikey, wait_first=0, wait_interval=0):
+        self.apikey = apikey
+        self.wait_first = wait_first
+        self.wait_interval = wait_interval
 
-DESTROY_WAIT_FIRST = 10
-DESTROY_WAIT_INTERVAL = 15
+    def launch(self, howmany, **kwargs):
+        """launch <howmany> workers, wait until booted and return their public IP addresses"""
 
-def launch(apikey, howmany, **kwargs):
-    """launch <howmany> workers, wait until booted and return their public IP addresses"""
+        hub = _Hub(self.apikey)
 
-    hub = Hub(apikey)
+        pending = []
+        for i in range(howmany):
+            server = hub.servers.launch('core', **kwargs)
+            pending.append(server)
 
-    pending = []
-    for i in range(howmany):
-        server = hub.servers.launch('core', **kwargs)
-        pending.append(server)
+        pending_ids = set([ server.instanceid for server in pending ])
 
-    pending_ids = set([ server.instanceid for server in pending ])
+        time.sleep(self.wait_first)
 
-    time.sleep(LAUNCH_WAIT_FIRST)
+        while True:
+            servers = [ server 
+                        for server in hub.servers.get(refresh_cache=True)
+                        if server.instanceid in pending_ids ]
 
-    while True:
-        servers = [ server 
-                    for server in hub.servers.get(refresh_cache=True)
-                    if server.instanceid in pending_ids ]
-
-        for server in servers:
-            if server.status != 'running' or server.boot_status != 'booted':
-                break
-        else:
-            return [ server.ipaddress for server in servers ]
-
-        time.sleep(LAUNCH_WAIT_INTERVAL)
-
-def destroy(apikey, addresses):
-    if not addresses:
-        return
-
-    hub = Hub(apikey)
-
-    servers = [ server
-                for server in hub.servers.get(refresh_cache=True)
-                if server.ipaddress in addresses ]
-
-    for server in servers:
-        server.destroy()
-
-    server_ids = set([ server.instanceid for server in servers ])
-
-    time.sleep(DESTROY_WAIT_FIRST)
-    while True:
-        servers = [ server 
-                    for server in hub.servers.get(refresh_cache=True)
-                    if server.instanceid in server_ids ]
-
-        done = True
-        for server in servers:
-            if server.status == 'terminated':
-                server.unregister()
+            for server in servers:
+                if server.status != 'running' or server.boot_status != 'booted':
+                    break
             else:
-                done = False
+                return [ server.ipaddress for server in servers ]
 
-        if done:
+            time.sleep(self.wait_interval)
+
+    def destroy(self, addresses):
+        if not addresses:
             return
-        else:
-            time.sleep(DESTROY_WAIT_INTERVAL)
+
+        hub = _Hub(self.apikey)
+
+        servers = [ server
+                    for server in hub.servers.get(refresh_cache=True)
+                    if server.ipaddress in addresses ]
+
+        for server in servers:
+            server.destroy()
+
+        server_ids = set([ server.instanceid for server in servers ])
+
+        time.sleep(self.wait_first)
+        while True:
+            servers = [ server 
+                        for server in hub.servers.get(refresh_cache=True)
+                        if server.instanceid in server_ids ]
+
+            done = True
+            for server in servers:
+                if server.status == 'terminated':
+                    server.unregister()
+                else:
+                    done = False
+
+            if done:
+                return
+            else:
+                time.sleep(self.wait_interval)

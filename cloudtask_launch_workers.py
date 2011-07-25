@@ -36,10 +36,11 @@ Usage example:
 """
 
 import os
+from os.path import *
 import sys
 import getopt
 
-from cloudtask import hub
+from cloudtask import Hub
 
 def usage(e=None):
     if e:
@@ -101,9 +102,12 @@ def main():
     if output == '-':
         output = sys.stdout
     else:
-        output = file(output, "a")
+        if exists(output):
+            fatal("'%s' already exists, refusing to overwrite" % output)
 
-    for address in hub.launch(apikey, howmany, **kwargs):
+        output = file(output, "w")
+
+    for address in Hub(apikey).launch(howmany, **kwargs):
         print >> output, address
 
 if __name__ == "__main__":

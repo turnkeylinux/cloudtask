@@ -17,7 +17,7 @@ import os
 import sys
 import getopt
 
-from cloudtask import hub
+from cloudtask import Hub
 
 def usage(e=None):
     if e:
@@ -62,7 +62,7 @@ def main():
 
     addresses = input.read().splitlines()
 
-    hub.destroy(apikey, addresses)
+    Hub(apikey).destroy(addresses)
 
 if __name__ == "__main__":
     main()
