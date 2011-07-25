@@ -30,6 +30,17 @@ class CloudWorker:
     class Error(Exception):
         pass
 
+    @classmethod
+    def _stop_handler(cls, event_stop):
+        def func():
+            if not event_stop:
+                return
+
+            if event_stop.is_set():
+                raise cls.Terminated
+
+        return func
+
     def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
 
         self.pid = os.getpid()
@@ -43,6 +54,7 @@ class CloudWorker:
         self.mlog = session.mlog
         self.session_key = session.key
 
+        self.hub_apikey = taskconf.hub_apikey
         self.timeout = taskconf.timeout
         self.cleanup_command = taskconf.post
         self.user = taskconf.user
@@ -63,6 +75,8 @@ class CloudWorker:
             self.status("using existing worker")
 
         self.ssh = None
+        self.handle_stop = self._stop_handler(event_stop)
+
         try:
             self.ssh = SSH(self.address, 
                            identity_file=self.session_key.path, 
@@ -98,6 +112,9 @@ class CloudWorker:
 
         self.ssh.remove_id(self.session_key.public)
 
+        if self.destroy and self.address:
+            Hub(self.hub_apikey).destroy([ self.address ])
+
     def __getstate__(self):
         return (self.address, self.pid)
 
@@ -114,13 +131,6 @@ class CloudWorker:
 
         if mlog and mlog != wlog:
             mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
-
-    def handle_stop(self):
-        if not self.event_stop:
-            return
-
-        if self.event_stop.is_set():
-            raise self.Terminated
 
     def __call__(self, command):
         timeout = self.timeout
@@ -176,9 +186,6 @@ class CloudWorker:
 
         self._cleanup()
 
-        if self.destroy and self.address:
-            Hub(self.taskconf.hub_apikey).destroy([ self.address ])
-
 class CloudExecutor:
     class Error(Exception):
         pass
@@ -233,4 +240,3 @@ class CloudExecutor:
         if self.taskconf.split:
             self._execute.wait()
             self._execute.stop()
-
