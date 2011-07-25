@@ -9,40 +9,53 @@ Resolution order for options:
 
 Options:
 
-    --user=USERNAME          Username to execute commands as (default: root)
-                             environment: CLOUDTASK_USER
+    --apikey=       Hub APIKEY
+                    environment: CLOUDTASK_APIKEY | HUB_APIKEY
+
+    --ec2-region=   Region for instance launch (default: us-east-1)
+                    environment: CLOUDTASK_EC2_REGION
+
+    --ec2-size=     Instance launch size (default: m1.small)
+                    environment: CLOUDTASK_EC2_SIZE
+
+    --ec2-type=     Instance launch type <s3|ebs> (default: s3)
+                    environment: CLOUDTASK_EC2_TYPE
+
+    --user=         Username to execute commands as (default: root)
+                    environment: CLOUDTASK_USER
                 
-    --pre=COMMAND            Worker setup command
-                             environment: CLOUDTASK_PRE
+    --pre=          Worker setup command
+                    environment: CLOUDTASK_PRE
 
-    --post=COMMAND           Worker cleanup command
-                             environment: CLOUDTASK_POST
+    --post=         Worker cleanup command
+                    environment: CLOUDTASK_POST
 
-    --overlay=PATH           Path to worker filesystem overlay
-                             environment: CLOUDTASK_OVERLAY
+    --overlay=      Path to worker filesystem overlay
+                    environment: CLOUDTASK_OVERLAY
 
-    --workers=<workers>      List of pre-launched workers to use
-                             environment: CLOUDTASK_WORKERS
+    --workers=      List of pre-launched workers to use
+                    environment: CLOUDTASK_WORKERS
         
-        <workers> := path/to/file | host1,host2,...hostN
+                    <workers> := path/to/file | host1,host2,...hostN
 
-    --timeout=SECS           How long to wait before giving up
-                             environment: CLOUDTASK_TIMEOUT
+    --timeout=      How many seconds to wait before giving up
+                    environment: CLOUDTASK_TIMEOUT
 
-    --split=N                How many processes to execute in parallel
-                             environment: CLOUDTASK_SPLIT
+    --split=        Number of workers to execute jobs in parallel
+                    environment: CLOUDTASK_SPLIT
 
-    --sessions=PATH          Path to location where sessions are stored
-                             environment: CLOUDTASK_SESSIONS
-                             default: $HOME/.cloudtask/
+    --sessions=     Path where sessions are stored (default: $HOME/.cloudtask)
+                    environment: CLOUDTASK_SESSIONS
 
-    --resume=ID              Resume session
+    --resume=       ID of session to resume
 
 Usage:
 
     seq 10 | cloudtask echo
     seq 10 | cloudtask --split=3 echo
-    cloudtask --timeout=6 --split=3 --resume=1
+
+    # resume session 1 while overriding timeout
+    cloudtask --resume=1 --timeout=6
 
 
 """
@@ -94,7 +107,7 @@ class Task:
                                        'h', ['help', 
                                              'resume=',
                                              'sessions='] +
-                                            [ attr + '=' 
+                                            [ attr.replace('_', '-') + '=' 
                                               for attr in TaskConf.__all__ ])
         except getopt.GetoptError, e:
             usage(e)
@@ -163,7 +176,7 @@ class Task:
 
             else:
                 opt = opt[2:]
-                taskconf[opt] = val
+                taskconf[opt.replace('-', '_')] = val
 
         if taskconf.workers:
             if isinstance(taskconf.workers, str):
