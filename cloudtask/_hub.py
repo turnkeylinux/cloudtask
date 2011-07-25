@@ -1,8 +1,11 @@
 from hub import Hub
 import time
 
-LAUNCH_WAIT_FIRST = 30
+LAUNCH_WAIT_FIRST = 0
 LAUNCH_WAIT_INTERVAL = 15
+
+DESTROY_WAIT_FIRST = 10
+DESTROY_WAIT_INTERVAL = 15
 
 def launch(apikey, howmany, **kwargs):
     """launch <howmany> workers, wait until booted and return their public IP addresses"""
@@ -43,3 +46,23 @@ def destroy(apikey, addresses):
 
     for server in servers:
         server.destroy()
+
+    server_ids = set([ server.instanceid for server in servers ])
+
+    time.sleep(DESTROY_WAIT_FIRST)
+    while True:
+        servers = [ server 
+                    for server in hub.servers.get(refresh_cache=True)
+                    if server.instanceid in server_ids ]
+
+        done = True
+        for server in servers:
+            if server.status == 'terminated':
+                server.unregister()
+            else:
+                done = False
+
+        if done:
+            return
+        else:
+            time.sleep(DESTROY_WAIT_INTERVAL)
