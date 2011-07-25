@@ -32,5 +32,14 @@ def launch(apikey, howmany, **kwargs):
         time.sleep(LAUNCH_WAIT_INTERVAL)
 
 def destroy(apikey, addresses):
-    raise Exception("not implemented")
+    if not addresses:
+        return
 
+    hub = Hub(apikey)
+
+    servers = [ server
+                for server in hub.servers.get(refresh_cache=True)
+                if server.ipaddress in addresses ]
+
+    for server in servers:
+        server.destroy()
