@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """
-Launch new cloud workers
+Launch new cloud workers and write list of addresses to a file
 
 Cloudtask can launch and destroy cloud workers automatically when needed, but
 sometimes it can be desirable to launch a persistent pool of workers and manage
@@ -29,9 +29,13 @@ Options:
     --type        Instance type <s3|ebs> (default: s3)
     --label       Hub description label for all launched servers
 
-Usage example:
+Usage examples:
 
+    # create workers.txt file with list of new worker addresses
     cloudtask-launch-workers 10 workers.txt
+
+    # append list of worker addresses to a file
+    cloudtask-launch-workers 10 - >> workers.txt
 
 """
 
@@ -46,7 +50,7 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Usage: %s [ -opts ] howmany ( path/to/file | - )" % sys.argv[0]
+    print >> sys.stderr, "Usage: %s [ -opts ] howmany ( path/to/list-of-ips | - )" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 

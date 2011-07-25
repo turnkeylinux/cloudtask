@@ -1,6 +1,6 @@
 #!/usr/bin/python
 """
-Destroy cloud workers
+Destroy + unregister cloud workers and remove their addresses from file listing
 
 Options:
 
@@ -15,7 +15,8 @@ Return codes:
 
 Usage example:
 
-    cloudtask-destroy-workers 10 workers.txt
+    cloudtask-destroy-workers worker-ips.txt
+    cat workers-ips | cloudtask-destroy-workers -
 
 """
 
@@ -29,7 +30,7 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Usage: %s [ -opts ] ( path/to/file | - )" % sys.argv[0]
+    print >> sys.stderr, "Usage: %s [ -opts ] ( path/to/list-of-ips | - )" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
