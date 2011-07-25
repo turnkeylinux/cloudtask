@@ -8,7 +8,7 @@ from multiprocessing import Event
 from multiprocessing_utils import Parallelize, Deferred
 
 from ssh import SSH
-import hub
+import _hub as hub
 
 class Timeout:
     def __init__(self, seconds=None):
