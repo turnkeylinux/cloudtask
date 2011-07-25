@@ -90,7 +90,7 @@ class CloudWorker:
             raise self.Error(e)
 
     def _cleanup(self):
-        if not self.ssh:
+        if not self.address or not self.ssh:
             return
 
         if self.cleanup_command:
