@@ -7,6 +7,12 @@ Options:
     --apikey      Hub APIKEY
                   Environment: HUB_APIKEY
 
+Return codes:
+
+    0   destroyed all workers
+    1   fatal error
+    2   couldn't destroy some workers
+
 Usage example:
 
     cloudtask-destroy-workers 10 workers.txt
@@ -56,13 +62,37 @@ def main():
 
     input = args[0]
     if input == '-':
-        input = sys.stdin
+        fh = sys.stdin
     else:
-        input = file(input)
+        fh = file(input)
 
-    addresses = input.read().splitlines()
+    addresses = fh.read().splitlines()
+    if not addresses:
+        print "no workers to destroy"
+        return
+    
+    destroyed = Hub(apikey).destroy(addresses)
+    if not destroyed:
+        fatal("couldn't destroy any workers")
+    
+    addresses_left = list(set(addresses) - set(destroyed))
+    if addresses_left:
+        print >> sys.stderr, "warning: can't destroy " + " ".join(addresses_left)
 
-    Hub(apikey).destroy(addresses)
+        addresses_left.sort()
+        if input != '-':
+            fh = file(input, "w")
+            for address in addresses_left:
+                print >> fh, address
+            fh.close()
+
+        sys.exit(2)
+
+    if not addresses_left:
+        if input != '-':
+            os.remove(input)
+
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()

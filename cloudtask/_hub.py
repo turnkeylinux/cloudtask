@@ -45,12 +45,17 @@ class Hub:
                     for server in hub.servers.get(refresh_cache=True)
                     if server.ipaddress in addresses ]
 
+        addresses =  dict([ (server.instanceid, server.ipaddress) 
+                             for server in servers ])
+
         for server in servers:
             server.destroy()
 
         server_ids = set([ server.instanceid for server in servers ])
 
         time.sleep(self.wait_first)
+
+        addresses_destroyed = []
         while True:
             servers = [ server 
                         for server in hub.servers.get(refresh_cache=True)
@@ -60,10 +65,13 @@ class Hub:
             for server in servers:
                 if server.status == 'terminated':
                     server.unregister()
+                    addresses_destroyed.append(addresses[server.instanceid])
+
                 else:
                     done = False
 
             if done:
-                return
+                return addresses_destroyed
             else:
                 time.sleep(self.wait_interval)
+
