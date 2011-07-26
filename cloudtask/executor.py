@@ -1,3 +1,5 @@
+from __future__ import with_statement
+
 import os
 import time
 import traceback
@@ -6,6 +8,8 @@ import signal
 
 from multiprocessing import Event
 from multiprocessing_utils import Parallelize, Deferred
+
+from sigignore import sigignore
 
 from ssh import SSH
 from _hub import Hub
@@ -54,27 +58,37 @@ class CloudWorker:
         self.mlog = session.mlog
         self.session_key = session.key
 
-        self.hub_apikey = taskconf.hub_apikey
         self.timeout = taskconf.timeout
         self.cleanup_command = taskconf.post
         self.user = taskconf.user
+
+        self.address = address
+        self.hub = None
+        self.ssh = None
 
         if destroy is None:
             if address:
                 destroy = False
             else:
                 destroy = True
-
         self.destroy = destroy
-        self.address = address
 
-        if not self.address:
-            self.address = Hub(taskconf.hub_apikey).launch(1)[0]
+        if not address:
+            if not taskconf.hub_apikey:
+                raise self.Error("can't auto launch a worker without a Hub API KEY")
+            self.hub = Hub(taskconf.hub_apikey)
+
+            with sigignore(signal.SIGINT, signal.SIGTERM):
+                self.address = self.hub.launch(1)[0]
+
+            if event_stop and event_stop.is_set():
+                raise self.Terminated
+
             self.status("launched new worker")
+
         else:
             self.status("using existing worker")
 
-        self.ssh = None
         self.handle_stop = self._stop_handler(event_stop)
 
         try:
@@ -104,20 +118,18 @@ class CloudWorker:
             raise self.Error(e)
 
     def _cleanup(self):
-        if not self.address or not self.ssh:
-            return
+        if self.ssh:
+            try:
+                self.ssh.callback = None
+                if self.cleanup_command:
+                    self.ssh.command(self.cleanup_command).close()
 
-        try:
-            self.ssh.callback = None
-            if self.cleanup_command:
-                self.ssh.command(self.cleanup_command).close()
+                self.ssh.remove_id(self.session_key.public)
+            except:
+                pass
 
-            self.ssh.remove_id(self.session_key.public)
-        except:
-            pass
-
-        if self.destroy and self.address:
-            destroyed = Hub(self.hub_apikey).destroy([ self.address ])
+        if self.destroy and self.address and self.hub:
+            destroyed = self.hub.destroy([ self.address ])
             if self.address in destroyed:
                 self.status("destroyed worker")
             else:
