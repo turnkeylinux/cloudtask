@@ -107,10 +107,14 @@ class CloudWorker:
         if not self.address or not self.ssh:
             return
 
-        if self.cleanup_command:
-            self.ssh.command(self.cleanup_command).close()
+        try:
+            self.ssh.callback = None
+            if self.cleanup_command:
+                self.ssh.command(self.cleanup_command).close()
 
-        self.ssh.remove_id(self.session_key.public)
+            self.ssh.remove_id(self.session_key.public)
+        except:
+            pass
 
         if self.destroy and self.address:
             Hub(self.hub_apikey).destroy([ self.address ])
