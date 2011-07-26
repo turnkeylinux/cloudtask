@@ -223,7 +223,9 @@ class Task:
                 if len(shlex.split(command[0])) > 1:
                     command = command[0]
 
-            taskconf.command = command
+            taskconf.command = (fmt_argv(command) 
+                                if isinstance(command, list) 
+                                else command)
 
             if os.isatty(sys.stdin.fileno()):
                 usage()

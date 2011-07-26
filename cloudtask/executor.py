@@ -7,13 +7,15 @@ import copy
 import signal
 import re
 
-from multiprocessing import Event
+from multiprocessing import Event, Queue
 from multiprocessing_utils import Parallelize, Deferred
 
 from sigignore import sigignore
 
 from ssh import SSH
 from _hub import Hub
+
+import threading
 
 class Timeout:
     def __init__(self, seconds=None):
@@ -46,7 +48,7 @@ class CloudWorker:
 
         return func
 
-    def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None):
+    def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None, launchq=None):
 
         self.pid = os.getpid()
 
@@ -80,12 +82,15 @@ class CloudWorker:
             self.hub = Hub(taskconf.hub_apikey)
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
-                kwargs = dict([ (attr[4:], taskconf[attr]) 
-                                for attr in taskconf.__all__ 
-                                if attr.startswith('ec2_') ])
-                kwargs['label'] = 'Cloudtask: ' + taskconf.command
+                if not launchq:
+                        kwargs = dict([ (attr[4:], taskconf[attr]) 
+                                        for attr in taskconf.__all__ 
+                                        if attr.startswith('ec2_') ])
+                        kwargs['label'] = 'Cloudtask: ' + taskconf.command
 
-                self.address = self.hub.launch(1, **kwargs)[0]
+                        self.address = self.hub.launch(1, **kwargs)
+                else:
+                    self.address = launchq.get()
 
             if event_stop and event_stop.is_set():
                 raise self.Terminated
@@ -240,13 +245,28 @@ class CloudExecutor:
 
             workers = []
             self.event_stop = Event()
+            
+            launchq = None
+
+            new_workers = split - len(addresses)
+            if new_workers > 0:
+                if not taskconf.hub_apikey:
+                    raise self.Error("need API KEY to launch %d new workers" % new_workers)
+
+                launchq = Queue()
+                def thread():
+                    for address in Hub(taskconf.hub_apikey).launch(new_workers):
+                        launchq.put(address)
+                threading.Thread(target=thread).start()
+
             for i in range(split):
                 if addresses:
                     address = addresses.pop(0)
                 else:
                     address = None
 
-                worker = Deferred(CloudWorker, session, taskconf, address, event_stop=self.event_stop)
+                worker = Deferred(CloudWorker, session, taskconf, address, 
+                                  event_stop=self.event_stop, launchq=launchq)
 
                 workers.append(worker)
 
