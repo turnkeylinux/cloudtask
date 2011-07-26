@@ -41,3 +41,10 @@ class TaskConf:
             taskconf[attr] = d[attr]
         return taskconf
 
+    @property
+    def ec2_opts(self):
+        opts = dict([ (attr[4:], self[attr]) 
+                       for attr in self.__all__ 
+                       if attr.startswith('ec2_') ])
+        opts['label'] = 'Cloudtask: ' + self.command
+        return opts

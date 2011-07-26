@@ -83,12 +83,7 @@ class CloudWorker:
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
                 if not launchq:
-                        kwargs = dict([ (attr[4:], taskconf[attr]) 
-                                        for attr in taskconf.__all__ 
-                                        if attr.startswith('ec2_') ])
-                        kwargs['label'] = 'Cloudtask: ' + taskconf.command
-
-                        self.address = self.hub.launch(1, **kwargs)
+                    self.address = self.hub.launch(1, **taskconf.ec2_opts)
                 else:
                     self.address = launchq.get()
 
@@ -255,7 +250,8 @@ class CloudExecutor:
 
                 launchq = Queue()
                 def thread():
-                    for address in Hub(taskconf.hub_apikey).launch(new_workers):
+                    hub = Hub(taskconf.hub_apikey)
+                    for address in hub.launch(new_workers, **taskconf.ec2_opts):
                         launchq.put(address)
                 threading.Thread(target=thread).start()
 
