@@ -83,6 +83,7 @@ class CloudWorker:
                 kwargs = dict([ (attr[4:], taskconf[attr]) 
                                 for attr in taskconf.__all__ 
                                 if attr.startswith('ec2_') ])
+                kwargs['label'] = 'cloudtask: ' + taskconf.command
 
                 self.address = self.hub.launch(1, **kwargs)[0]
 
