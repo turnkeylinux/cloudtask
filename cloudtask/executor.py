@@ -5,6 +5,7 @@ import time
 import traceback
 import copy
 import signal
+import re
 
 from multiprocessing import Event
 from multiprocessing_utils import Parallelize, Deferred
@@ -193,6 +194,10 @@ class CloudWorker:
             raise
 
         if ssh_command.exitcode is not None:
+            if ssh_command.exitcode == 255 and re.match(r'^ssh: connect to host.*:.*$', ssh_command.output):
+                self.status("worker unreachable # %s" % command)
+                raise SSH.Error(ssh_command.output)
+
             self.status("exit %d # %s" % (ssh_command.exitcode, command))
 
         if self.wlog:
