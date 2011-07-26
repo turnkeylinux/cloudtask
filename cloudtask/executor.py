@@ -129,7 +129,7 @@ class CloudWorker:
                 pass
 
         if self.destroy and self.address and self.hub:
-            destroyed = self.hub.destroy([ self.address ])
+            destroyed = self.hub.destroy(self.address)
             if self.address in destroyed:
                 self.status("destroyed worker")
             else:

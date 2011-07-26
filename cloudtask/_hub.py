@@ -35,7 +35,7 @@ class Hub:
 
             time.sleep(self.wait_interval)
 
-    def destroy(self, addresses):
+    def destroy(self, *addresses):
         if not addresses:
             return
 

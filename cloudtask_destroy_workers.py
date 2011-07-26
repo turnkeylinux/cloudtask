@@ -72,7 +72,7 @@ def main():
         print "no workers to destroy"
         return
     
-    destroyed = Hub(apikey).destroy(addresses)
+    destroyed = Hub(apikey).destroy(*addresses)
     if not destroyed:
         fatal("couldn't destroy any workers")
     
