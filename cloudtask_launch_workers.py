@@ -63,7 +63,7 @@ def main():
         'region': "us-east-1",
         'size': "m1.small",
         'type': "s3",
-        'label': "",
+        'label': "cloudtask",
     }
 
     apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
