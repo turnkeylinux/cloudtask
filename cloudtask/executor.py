@@ -80,7 +80,13 @@ class CloudWorker:
             self.hub = Hub(taskconf.hub_apikey)
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
-                self.address = self.hub.launch(1)[0]
+                kwargs = {}
+                for attr in taskconf.__all__:
+                    if not attr.startswith('ec2_'):
+                        continue
+                    kwargs[attr[4:]] = taskconf[attr]
+
+                self.address = self.hub.launch(1, **kwargs)[0]
 
             if event_stop and event_stop.is_set():
                 raise self.Terminated
