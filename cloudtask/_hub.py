@@ -22,16 +22,21 @@ class Hub:
 
         time.sleep(self.wait_first)
 
+        yielded_ids = set([])
         while True:
             servers = [ server 
                         for server in hub.servers.get(refresh_cache=True)
-                        if server.instanceid in pending_ids ]
+                        if server.instanceid in (pending_ids | yielded_ids) ]
 
             for server in servers:
                 if server.status != 'running' or server.boot_status != 'booted':
-                    break
-            else:
-                return [ server.ipaddress for server in servers ]
+                    continue
+
+                yielded_ids.add(server.instanceid)
+                yield server.ipaddress
+
+            if len(yielded_ids) == len(pending_ids):
+                break
 
             time.sleep(self.wait_interval)
 
