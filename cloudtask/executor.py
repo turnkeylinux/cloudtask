@@ -80,11 +80,9 @@ class CloudWorker:
             self.hub = Hub(taskconf.hub_apikey)
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
-                kwargs = {}
-                for attr in taskconf.__all__:
-                    if not attr.startswith('ec2_'):
-                        continue
-                    kwargs[attr[4:]] = taskconf[attr]
+                kwargs = dict([ (attr[4:], taskconf[attr]) 
+                                for attr in taskconf.__all__ 
+                                if attr.startswith('ec2_') ])
 
                 self.address = self.hub.launch(1, **kwargs)[0]
 
