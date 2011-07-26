@@ -70,7 +70,7 @@ class CloudWorker:
 
         if not self.address:
             self.address = Hub(taskconf.hub_apikey).launch(1)[0]
-            self.status("hub launched worker")
+            self.status("launched new worker")
         else:
             self.status("using existing worker")
 
@@ -117,7 +117,11 @@ class CloudWorker:
             pass
 
         if self.destroy and self.address:
-            Hub(self.hub_apikey).destroy([ self.address ])
+            destroyed = Hub(self.hub_apikey).destroy([ self.address ])
+            if self.address in destroyed:
+                self.status("destroyed worker")
+            else:
+                self.status("failed to destroy worker")
 
     def __getstate__(self):
         return (self.address, self.pid)
