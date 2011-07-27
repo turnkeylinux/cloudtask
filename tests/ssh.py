@@ -7,7 +7,7 @@ class SSHCommand(Command):
         opts = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
 
-        argv = ['ssh']
+        argv = ['ssh', '-t']
         for opt in opts:
             argv += [ "-o", opt ]
 

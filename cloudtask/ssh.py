@@ -15,8 +15,12 @@ class SSH:
             pass
 
         @classmethod
-        def argv(cls, identity_file=None, login_name=None, *args):
+        def argv(cls, identity_file=None, login_name=None, pty=True, *args):
             argv = ['ssh']
+
+            if pty:
+                argv += [ '-t' ]
+
             if identity_file:
                 argv += [ '-i', identity_file ]
 
@@ -37,7 +41,7 @@ class SSH:
             self.command = command
             self.callback = callback
 
-            argv = self.argv(identity_file, login_name, address, command)
+            argv = self.argv(identity_file, login_name, True, address, command)
             Command.__init__(self, argv, setpgrp=True)
 
         def __str__(self):
