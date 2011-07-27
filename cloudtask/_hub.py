@@ -15,12 +15,12 @@ class Hub:
     class Error(Exception):
         pass
 
-    #def __init__(self, apikey, wait_first=30, wait_interval=15):
-    def __init__(self, apikey, wait_first=1, wait_interval=1, wait_retry=5, retries=2):
+    #def __init__(self, apikey, wait_first=30, wait_status=15):
+    def __init__(self, apikey, wait_first=1, wait_status=1, wait_retry=5, retries=2):
 
         self.apikey = apikey
         self.wait_first = wait_first
-        self.wait_interval = wait_interval
+        self.wait_status = wait_status
         self.retries = retries
 
     def retry(self, callable, *args, **kwargs):
@@ -67,7 +67,7 @@ class Hub:
             if len(yielded_ids) == howmany:
                 break
 
-            time.sleep(self.wait_interval)
+            time.sleep(self.wait_status)
 
     def launch(self, howmany, **kwargs):
         if howmany == 1:
@@ -114,4 +114,4 @@ class Hub:
             if done:
                 return addresses_destroyed
             else:
-                time.sleep(self.wait_interval)
+                time.sleep(self.wait_status)
