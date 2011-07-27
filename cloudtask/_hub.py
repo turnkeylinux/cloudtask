@@ -16,7 +16,7 @@ class Hub:
         pass
 
     #def __init__(self, apikey, wait_first=30, wait_interval=15):
-    def __init__(self, apikey, wait_first=1, wait_interval=1, retries=2):
+    def __init__(self, apikey, wait_first=1, wait_interval=1, retries=1):
         self.apikey = apikey
         self.wait_first = wait_first
         self.wait_interval = wait_interval
