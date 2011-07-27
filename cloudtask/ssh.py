@@ -15,7 +15,7 @@ class SSH:
             pass
 
         @classmethod
-        def argv(cls, identity_file=None, login_name=None, pty=True, *args):
+        def argv(cls, identity_file=None, login_name=None, pty=False, *args):
             argv = ['ssh']
 
             if pty:
@@ -31,18 +31,20 @@ class SSH:
                 argv += [ "-o", opt ]
 
             argv += args
+
             return argv
 
         def __init__(self, address, command, 
                      identity_file=None, 
                      login_name=None,
-                     callback=None):
+                     callback=None,
+                     pty=False):
             self.address = address
             self.command = command
             self.callback = callback
 
-            argv = self.argv(identity_file, login_name, True, address, command)
-            Command.__init__(self, argv, setpgrp=True)
+            argv = self.argv(identity_file, login_name, pty, address, command)
+            Command.__init__(self, argv, pty=pty, setpgrp=True)
 
         def __str__(self):
             return "ssh %s %s" % (self.address, `self.command`)
@@ -78,11 +80,12 @@ class SSH:
 
         return True
 
-    def command(self, command):
+    def command(self, command, pty=False):
         return self.Command(self.address, command, 
                             identity_file=self.identity_file,
                             login_name=self.login_name,
-                            callback=self.callback)
+                            callback=self.callback,
+                            pty=pty)
 
     def copy_id(self, key_path):
         if not key_path.endswith(".pub"):

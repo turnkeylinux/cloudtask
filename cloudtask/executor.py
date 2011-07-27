@@ -164,7 +164,7 @@ class CloudWorker:
         self.handle_stop()
 
         self.status(str(command))
-        ssh_command = self.ssh.command(command)
+        ssh_command = self.ssh.command(command, pty=True)
 
         timeout = Timeout(timeout)
         read_timeout = Timeout(self.ssh.TIMEOUT)
