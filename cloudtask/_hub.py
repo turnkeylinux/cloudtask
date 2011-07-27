@@ -16,52 +16,46 @@ class Hub:
         pass
 
     #def __init__(self, apikey, wait_first=30, wait_interval=15):
-    def __init__(self, apikey, wait_first=1, wait_interval=1, retries=1):
+    def __init__(self, apikey, wait_first=1, wait_interval=1, wait_retry=5, retries=2):
+
         self.apikey = apikey
         self.wait_first = wait_first
         self.wait_interval = wait_interval
         self.retries = retries
 
+    def retry(self, callable, *args, **kwargs):
+        for i in range(self.retries + 1):
+            try:
+                return callable(*args, **kwargs)
+            except HubAPIError, e:
+                if e.name == 'HubAccount.InvalidApiKey':
+                    raise self.Error(e)
+
+                time.sleep(self.wait_retry)
+
+        raise self.Error(e)
+
     def _launch(self, howmany, **kwargs):
         """launch <howmany> workers, wait until booted and return their public IP addresses"""
 
+        retry = self.retry
         hub = _Hub(self.apikey)
-
-        errors_tb = set()
-        errors = 0
 
         pending_ids = set()
         yielded_ids = set()
 
         time_started = time.time()
         while True:
-            if errors > (howmany * self.retries):
-                raise self.Error("Too many API errors:\n" + "\n".join(errors_tb))
-
             if len(pending_ids) < howmany:
-                try:
-                    server = hub.servers.launch('core', **kwargs)
-                except HubAPIError, e:
-                    if e.name == 'HubAccount.InvalidApiKey':
-                        raise self.Error(e)
-
-                    errors_tb.add(get_traceback())
-                    errors += 1
-
-                    continue
+                server = retry(hub.servers.launch, 'core', **kwargs)
                 pending_ids.add(server.instanceid)
 
             if time.time() - time_started < self.wait_first:
                 continue
 
-            try:
-                servers = [ server 
-                            for server in hub.servers.get(refresh_cache=True)
-                            if server.instanceid in (pending_ids - yielded_ids) ]
-            except HubAPIError:
-                # ignore hopefully temporary error
-                time.sleep(self.wait_interval)
-                continue
+            servers = [ server 
+                        for server in retry(hub.servers.get, refresh_cache=True)
+                        if server.instanceid in (pending_ids - yielded_ids) ]
 
             for server in servers:
                 if server.status != 'running' or server.boot_status != 'booted':
@@ -86,18 +80,7 @@ class Hub:
             return
 
         hub = _Hub(self.apikey)
-
-        def retry(callable, *args, **kwargs):
-            for i in range(self.retries + 1):
-                try:
-                    return callable(*args, **kwargs)
-                except HubAPIError, e:
-                    if e.name == 'HubAccount.InvalidApiKey':
-                        raise self.Error(e)
-
-                    time.sleep(self.wait_interval)
-
-            raise self.Error(e)
+        retry = self.retry
 
         destroyable = [ server
                         for server in retry(hub.servers.get, refresh_cache=True)
