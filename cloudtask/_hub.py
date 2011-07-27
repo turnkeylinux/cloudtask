@@ -86,17 +86,17 @@ class Hub:
 
         hub = _Hub(self.apikey)
 
-        servers = [ server
-                    for server in hub.servers.get(refresh_cache=True)
-                    if server.ipaddress in addresses ]
+        destroyable = [ server
+                        for server in hub.servers.get(refresh_cache=True)
+                        if server.ipaddress in addresses ]
 
         addresses =  dict([ (server.instanceid, server.ipaddress) 
-                             for server in servers ])
+                             for server in destroyable ])
 
-        for server in servers:
+        for server in destroyable:
             server.destroy()
 
-        server_ids = set([ server.instanceid for server in servers ])
+        server_ids = set([ server.instanceid for server in destroyable ])
 
         time.sleep(self.wait_first)
 
