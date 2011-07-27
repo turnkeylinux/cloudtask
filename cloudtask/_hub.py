@@ -1,29 +1,56 @@
 from hub import Hub as _Hub
+from hub.utils import HubAPIError
+
 import time
 
+from StringIO import StringIO
+import traceback
+
+def get_traceback():
+    sio = StringIO()
+    traceback.print_exc(file=sio)
+    return sio.getvalue()
+
 class Hub:
+    class Error(Exception):
+        pass
+
     #def __init__(self, apikey, wait_first=30, wait_interval=15):
-    def __init__(self, apikey, wait_first=1, wait_interval=1):
+    def __init__(self, apikey, wait_first=1, wait_interval=1, retries=2):
         self.apikey = apikey
         self.wait_first = wait_first
         self.wait_interval = wait_interval
+        self.retries = retries
 
     def _launch(self, howmany, **kwargs):
         """launch <howmany> workers, wait until booted and return their public IP addresses"""
 
         hub = _Hub(self.apikey)
 
-        pending = []
-        for i in range(howmany):
-            server = hub.servers.launch('core', **kwargs)
-            pending.append(server)
+        errors_tb = set()
+        errors = 0
 
-        pending_ids = set([ server.instanceid for server in pending ])
+        pending_ids = set()
+        yielded_ids = set()
 
-        time.sleep(self.wait_first)
-
-        yielded_ids = set([])
+        time_started = time.time()
         while True:
+            if errors > (howmany * self.retries):
+                raise self.Error("Too many API errors:\n" + "\n".join(errors_tb))
+
+            if len(pending_ids) < howmany:
+                try:
+                    server = hub.servers.launch('core', **kwargs)
+                except HubAPIError, e:
+                    errors_tb.add(get_traceback())
+                    errors += 1
+
+                    continue
+                pending_ids.add(server.instanceid)
+
+            if time.time() - time_started < self.wait_first:
+                continue
+
             servers = [ server 
                         for server in hub.servers.get(refresh_cache=True)
                         if server.instanceid in (pending_ids - yielded_ids) ]
@@ -35,7 +62,7 @@ class Hub:
                 yielded_ids.add(server.instanceid)
                 yield server.ipaddress
 
-            if len(yielded_ids) == len(pending_ids):
+            if len(yielded_ids) == howmany:
                 break
 
             time.sleep(self.wait_interval)
