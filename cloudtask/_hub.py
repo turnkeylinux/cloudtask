@@ -42,6 +42,9 @@ class Hub:
                 try:
                     server = hub.servers.launch('core', **kwargs)
                 except HubAPIError, e:
+                    if e.name == 'HubAccount.InvalidApiKey':
+                        raise self.Error(e)
+
                     errors_tb.add(get_traceback())
                     errors += 1
 
