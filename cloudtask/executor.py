@@ -87,7 +87,7 @@ class CloudWorker:
                 else:
                     self.address = launchq.get()
 
-            if event_stop and event_stop.is_set():
+            if not self.address or (event_stop and event_stop.is_set()):
                 raise self.Terminated
 
             self.status("launched new worker")
@@ -251,8 +251,21 @@ class CloudExecutor:
                 launchq = Queue()
                 def thread():
                     hub = Hub(taskconf.hub_apikey)
-                    for address in hub.launch(new_workers, **taskconf.ec2_opts):
-                        launchq.put(address)
+                    i = None
+                    try:
+                        for i, address in enumerate(hub.launch(new_workers, **taskconf.ec2_opts)):
+                            launchq.put(address)
+                    except hub.Error:
+
+                        unlaunched_workers = new_workers - (i + 1) \
+                                             if i is not None \
+                                             else new_workers
+
+                        for i in range(unlaunched_workers):
+                            launchq.put(None)
+
+                        traceback.print_exc(file=session.mlog)
+
                 threading.Thread(target=thread).start()
 
             for i in range(split):
@@ -285,4 +298,5 @@ class CloudExecutor:
     def join(self):
         if self.taskconf.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
+            #self._execute.wait()
             self._execute.stop()
