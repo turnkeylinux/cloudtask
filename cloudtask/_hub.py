@@ -26,7 +26,7 @@ class Hub:
         while True:
             servers = [ server 
                         for server in hub.servers.get(refresh_cache=True)
-                        if server.instanceid in (pending_ids | yielded_ids) ]
+                        if server.instanceid in (pending_ids - yielded_ids) ]
 
             for server in servers:
                 if server.status != 'running' or server.boot_status != 'booted':
