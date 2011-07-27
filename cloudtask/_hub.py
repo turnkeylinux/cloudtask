@@ -4,12 +4,6 @@ from hub.utils import HubAPIError
 import time
 
 from StringIO import StringIO
-import traceback
-
-def get_traceback():
-    sio = StringIO()
-    traceback.print_exc(file=sio)
-    return sio.getvalue()
 
 class Hub:
     class Error(Exception):
