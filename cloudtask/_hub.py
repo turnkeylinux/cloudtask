@@ -54,9 +54,13 @@ class Hub:
             if time.time() - time_started < self.wait_first:
                 continue
 
-            servers = [ server 
-                        for server in hub.servers.get(refresh_cache=True)
-                        if server.instanceid in (pending_ids - yielded_ids) ]
+            try:
+                servers = [ server 
+                            for server in hub.servers.get(refresh_cache=True)
+                            if server.instanceid in (pending_ids - yielded_ids) ]
+            except HubAPIError:
+                # ignoring hopefully temporary error
+                continue
 
             for server in servers:
                 if server.status != 'running' or server.boot_status != 'booted':
