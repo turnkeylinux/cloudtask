@@ -298,5 +298,4 @@ class CloudExecutor:
     def join(self):
         if self.taskconf.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
-            #self._execute.wait()
             self._execute.stop()
