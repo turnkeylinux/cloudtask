@@ -8,9 +8,6 @@ def foo():
     time.sleep(1)
     raise Error
 
-thread = threading.Thread(target=foo)
-thread.start()
-thread.join()
+threading.Thread(target=foo).start()
 
-time.sleep(3)
 print "DONE"
