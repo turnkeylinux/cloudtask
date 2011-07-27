@@ -241,6 +241,9 @@ class Task:
 
                 jobs.append(job)
 
+        if split > len(jobs):
+            split = len(jobs)
+
         if not session:
             session = Session(opt_sessions)
 
@@ -258,7 +261,7 @@ class Task:
         executor = None
 
         try:
-            executor = CloudExecutor(session, taskconf)
+            executor = CloudExecutor(split, session, taskconf)
             for job in jobs:
                 executor(job)
 

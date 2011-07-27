@@ -220,12 +220,10 @@ class CloudExecutor:
     class Error(Exception):
         pass
 
-    def __init__(self, session, taskconf):
-        self.session = session
-        self.taskconf = taskconf
-
-        split = taskconf.split
+    def __init__(self, split, session, taskconf):
         addresses = taskconf.workers
+        if split == 1:
+            split = False
 
         if not split:
             if addresses:
@@ -282,13 +280,15 @@ class CloudExecutor:
             self._execute = Parallelize(workers)
             self.results = self._execute.results
 
+        self.split = split
+
     def __call__(self, job):
         result = self._execute(job)
-        if not self.taskconf.split:
+        if not self.split:
             self.results.append(result)
 
     def stop(self):
-        if not self.taskconf.split:
+        if not self.split:
             return
 
         self.event_stop.set()
@@ -296,6 +296,6 @@ class CloudExecutor:
         self._execute.stop()
 
     def join(self):
-        if self.taskconf.split:
+        if self.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
             self._execute.stop()
