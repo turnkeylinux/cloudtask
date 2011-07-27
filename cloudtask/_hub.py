@@ -59,7 +59,8 @@ class Hub:
                             for server in hub.servers.get(refresh_cache=True)
                             if server.instanceid in (pending_ids - yielded_ids) ]
             except HubAPIError:
-                # ignoring hopefully temporary error
+                # ignore hopefully temporary error
+                time.sleep(self.wait_interval)
                 continue
 
             for server in servers:
@@ -86,30 +87,42 @@ class Hub:
 
         hub = _Hub(self.apikey)
 
+        def retry(callable, *args, **kwargs):
+            for i in range(self.retries + 1):
+                try:
+                    return callable(*args, **kwargs)
+                except HubAPIError, e:
+                    if e.name == 'HubAccount.InvalidApiKey':
+                        raise self.Error(e)
+
+                    time.sleep(self.wait_interval)
+
+            raise self.Error(e)
+
         destroyable = [ server
-                        for server in hub.servers.get(refresh_cache=True)
+                        for server in retry(hub.servers.get, refresh_cache=True)
                         if server.ipaddress in addresses ]
 
         addresses =  dict([ (server.instanceid, server.ipaddress) 
                              for server in destroyable ])
 
         for server in destroyable:
-            server.destroy()
+            retry(server.destroy)
 
-        server_ids = set([ server.instanceid for server in destroyable ])
+        destroyable_ids = set([ server.instanceid for server in destroyable ])
 
         time.sleep(self.wait_first)
 
         addresses_destroyed = []
         while True:
             servers = [ server 
-                        for server in hub.servers.get(refresh_cache=True)
-                        if server.instanceid in server_ids ]
+                        for server in retry(hub.servers.get, refresh_cache=True)
+                        if server.instanceid in destroyable_ids ]
 
             done = True
             for server in servers:
                 if server.status == 'terminated':
-                    server.unregister()
+                    retry(server.unregister)
                     addresses_destroyed.append(addresses[server.instanceid])
 
                 else:
@@ -119,4 +132,3 @@ class Hub:
                 return addresses_destroyed
             else:
                 time.sleep(self.wait_interval)
-
