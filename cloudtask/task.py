@@ -51,6 +51,7 @@ import shlex
 import getopt
 import signal
 import traceback
+import re
 
 from session import Session
 
@@ -91,10 +92,35 @@ class Task:
 
     @classmethod
     def confirm(cls, taskconf, split, jobs):
-        print >> sys.stderr, "About to launch %d cloud servers to execute the following task:" % split
+        print >> sys.stderr, "About to launch %d cloud server%s to execute the following task:" % (split, "s" if split and split > 1 else "")
 
-        print >> sys.stderr, `jobs`
-        print >> sys.stderr, `taskconf`
+        job_first = re.sub(taskconf.command + '\s*', '', jobs[0])
+        job_last = re.sub(taskconf.command + '\s*', '', jobs[-1])
+
+        job_range = ("%s .. %s" % (job_first, job_last) 
+                     if job_first != job_last else "%s" % job_first)
+
+        table = [ ('jobs', '%d (%s)' % (len(jobs), job_range)) ]
+
+        for attr in ('command', 'hub-apikey', 
+                     'ec2-region', 'ec2-size', 'ec2-type', 'user', 'workers', 
+                     'overlay', 'post', 'pre', 'timeout', 'report'):
+
+            val = taskconf[attr.replace('-', '_')]
+            if isinstance(val, list):
+                val = " ".join(val)
+            if not val:
+                val = "-"
+            table.append((attr, val))
+
+        print >> sys.stderr
+        print >> sys.stderr, "  Parameter       Value"
+        print >> sys.stderr, "  ---------       -----"
+        print >> sys.stderr
+        for row in table:
+            print >> sys.stderr, "  %-15s %s" % (row[0], row[1])
+
+        print >> sys.stderr
 
         orig_stdin = sys.stdin 
         sys.stdin = os.fdopen(sys.stderr.fileno(), 'r')
