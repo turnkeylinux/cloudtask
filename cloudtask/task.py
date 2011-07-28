@@ -186,6 +186,8 @@ class Task:
                 reporter = Reporter(taskconf.report)
             except Reporter.Error, e:
                 error(e)
+        else:
+            reporter = None
 
         split = taskconf.split if taskconf.split else 1
         if len(taskconf.workers) < split and not taskconf.hub_apikey:
@@ -286,7 +288,8 @@ class Task:
         print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
                                 (session.id, len(exitcodes), session.elapsed, succeeded, failed)
 
-        reporter.report(session)
+        if reporter:
+            reporter.report(session)
 
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
