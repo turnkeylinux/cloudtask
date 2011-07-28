@@ -1,3 +1,5 @@
+import os
+import sys
 from distutils.core import setup
 from executil import getoutput
 from os.path import *
@@ -26,10 +28,20 @@ def parse_control(control):
 
     return d
 
+def get_packages():
+    packages = []
+    source_path = abspath(dirname(sys.argv[0]))
+    for fname in os.listdir(source_path):
+        fpath = join(source_path, fname)
+        if isdir(fpath) and exists(join(fpath, '__init__.py')):
+            packages.append(fname)
+
+    return packages
+
 def main():
     control_fields = parse_control(file("debian/control").read())
 
-    setup(packages = ['cloudtask'],
+    setup(packages = get_packages(),
           # non-essential meta-data
           name=control_fields['Source'],
           version=get_version(),
@@ -37,5 +49,3 @@ def main():
 
 if __name__=="__main__":
     main()
-
-
