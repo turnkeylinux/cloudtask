@@ -2,12 +2,12 @@ import os
 from os.path import *
 import re
 
-def report(session):
-    taskconf = session.taskconf
-    if not taskconf.report:
-        return
+import shlex
+from email.Message import Message
+from command import Command
 
-    hook = taskconf.report.strip()
+class Error(Exception):
+    pass
 
 class PythonHandler:
     def __init__(self, expr):
@@ -28,11 +28,70 @@ class PythonHandler:
         eval(self.code, {}, vars)
 
 class MailHandler:
+    class Sendmail:
+        SENDMAIL_PATH = "/usr/sbin/sendmail"
+        def __init__(self):
+            if not exists(self.SENDMAIL_PATH):
+                raise Error("can't use mail handler: missing " + self.SENDMAIL_PATH)
+
+        def __call__(self, sender, recipient, subject, body):
+            
+            msg = Message()
+            msg.add_header("Subject", subject)
+            msg.add_header("To", str(recipient))
+            msg.add_header("From", str(sender))
+            msg.set_payload(body)
+
+            command = [ self.SENDMAIL_PATH, '-i', '-f', sender.address, recipient.address ] 
+            command = Command(command)
+            command.tochild.write(msg.as_string())
+            command.tochild.close()
+            command.wait()
+
+            if command.exitcode != 0:
+                raise Error("sendmail failed (%d): %s" % (command.exitcode,
+                                                          command.output))
+
+    class Email:
+        def __init__(self, email):
+            self.email = email
+            m = re.search(r'<(.*)>', email)
+            if m:
+                address = m.group(1)
+            else:
+                address = email
+
+            if not re.match(r'^[\w\.]+\@[\w\.]+$', address):
+                raise Error("illegal email address '%s'" % email)
+
+            self.address = address
+
+        def __repr__(self):
+            return '<Email(%s)>' % `str(self)`
+
+        def __str__(self):
+            return self.email
+
     def __init__(self, expr):
-        pass
+        args = [ self.Email(arg) for arg in shlex.split(expr) ]
+        if len(args) < 2:
+            raise Error("mail handler needs at least 1 recipient (in addition to the sender's address)")
+
+        self.sender = args[0]
+        self.recipients = args[1:]
+        self.sendmail = self.Sendmail()
 
     def __call__(self, session):
-        pass
+        mlog = file(session.paths.log).read()
+        taskconf = session.taskconf
+
+        for recipient in self.recipients:
+
+            subject = "[Cloudtask] " + taskconf.command
+
+            self.sendmail(self.sender, recipient, 
+                          subject, mlog)
+
 
 class ShellHandler:
     ENV_WHITELIST = ('HOME', 'PATH', 'USER', 'SHELL')
@@ -48,8 +107,7 @@ class ShellHandler:
         os.system(self.command)
 
 class Reporter:
-    class Error(Exception):
-        pass
+    Error = Error
 
     handlers = {
         'py': PythonHandler,
