@@ -83,7 +83,7 @@ class CloudWorker:
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
                 if not launchq:
-                    self.address = self.hub.launch(1, **taskconf.ec2_opts)
+                    self.address = list(self.hub.launch(1, **taskconf.ec2_opts))[0]
                 else:
                     self.address = launchq.get()
 

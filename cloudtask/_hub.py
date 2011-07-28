@@ -29,7 +29,7 @@ class Hub:
 
         raise self.Error(e)
 
-    def _launch(self, howmany, **kwargs):
+    def launch(self, howmany, **kwargs):
         """launch <howmany> workers, wait until booted and return their public IP addresses"""
 
         retry = self.retry
@@ -62,12 +62,6 @@ class Hub:
                 break
 
             time.sleep(self.wait_status)
-
-    def launch(self, howmany, **kwargs):
-        if howmany == 1:
-            return list(self._launch(howmany, **kwargs))[0]
-        else:
-            return self._launch(howmany, **kwargs)
 
     def destroy(self, *addresses):
         if not addresses:
