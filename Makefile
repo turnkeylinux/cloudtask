@@ -39,7 +39,7 @@ debbuild=debian/$(shell awk '/^Package/ {print $$2}' debian/control)
 
 truepath = $(shell echo $1 | sed -e 's|^$(debbuild)||')
 libpath = $(call truepath,$(PATH_INSTALL_LIB))/$$(basename $1)
-subcommand = $(progname)-$$(echo $1 | sed 's|.*/||; s/^cmd_//; s/_/-/g; s/.py$$//')
+subcommand = $$(echo $1 | sed 's|.*/||; s/^$(progname)_\?//; s/^cmd_//; s/_/-/g; s/.py$$//; s/^\(.\)/$(progname)-\1/; s/^$$/$(progname)/')
 echo-do = echo $1; $1
 
 # first argument: code we execute if there is just one executable module
@@ -70,6 +70,7 @@ install:
 
 	install -d $(PATH_BIN) $(PATH_INSTALL_LIB)
 	cp *.py $(PATH_INSTALL_LIB)
+	python setup.py install --prefix $(prefix)
 
 	$(call with-py-executables, \
 	  ln -fs $(call libpath, $$module) $(PATH_BIN)/$(progname), \
