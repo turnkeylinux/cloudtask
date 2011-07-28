@@ -47,7 +47,7 @@ Options:
     --report=       Task reporting hook
                     environment: CLOUDTASK_REPORT
 
-                    email you@mail.com | sh command | py file | py expression
+                    mail:your@mail.com | sh:command | py:file | py:code
 
     --sessions=     Path where sessions are stored (default: $HOME/.cloudtask)
                     environment: CLOUDTASK_SESSIONS
@@ -78,7 +78,7 @@ from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
 from taskconf import TaskConf
-from report import report
+from reporter import Reporter
 
 class Task:
 
@@ -202,6 +202,12 @@ class Task:
             else:
                 taskconf.workers = list(taskconf.workers)
 
+        if taskconf.report:
+            try:
+                reporter = Reporter(taskconf.report)
+            except Reporter.Error, e:
+                error(e)
+
         split = taskconf.split if taskconf.split else 1
         if len(taskconf.workers) < split and not taskconf.hub_apikey:
             error("please provide a HUB APIKEY or more pre-launched workers")
@@ -301,7 +307,7 @@ class Task:
         print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
                                 (session.id, len(exitcodes), session.elapsed, succeeded, failed)
 
-        report(session)
+        reporter.report(session)
 
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
