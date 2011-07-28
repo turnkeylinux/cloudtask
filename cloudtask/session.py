@@ -14,9 +14,9 @@ import executil
 from taskconf import TaskConf
 import pprint
 
-def makedirs(path):
+def makedirs(path, mode=0750):
     try:
-        os.makedirs(path)
+        os.makedirs(path, mode)
     except OSError, e:
         if e.errno != errno.EEXIST:
             raise
