@@ -1,4 +1,5 @@
 import re
+from os.path import *
 
 def report(session):
     taskconf = session.taskconf
@@ -9,6 +10,9 @@ def report(session):
 
 class PythonHandler:
     def __init__(self, expr):
+        if isfile(expr):
+            expr = file(expr).read()
+
         self.code = compile(expr, '--report', 'exec')
 
     def __call__(self, session):
@@ -35,7 +39,6 @@ class Reporter:
 
     handlers = {
         'py': PythonHandler,
-        'dummy':  DummyHandler
     }
 
     def __init__(self, hook):
@@ -49,7 +52,7 @@ class Reporter:
         handler, expr = m.groups()
 
         if handler not in handlers:
-            raise self.Error("no '%s' in supported handlers (%s)" % (handler, ", ".join(handlers)))
+            raise self.Error("no '%s' in supported reporting handlers (%s)" % (handler, ", ".join(handlers)))
 
 
         handler = handlers[handler]
