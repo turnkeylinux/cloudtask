@@ -17,6 +17,8 @@ class TaskConf:
     ec2_size = 'm1.small'
     ec2_type = 's3'
 
+    report = None
+
     __all__ = [ attr for attr in dir() if not attr.startswith("_") ]
 
     def __getitem__(self, name):

@@ -44,6 +44,11 @@ Options:
     --split=        Number of workers to execute jobs in parallel
                     environment: CLOUDTASK_SPLIT
 
+    --report=       Task reporting hook
+                    environment: CLOUDTASK_REPORT
+
+                    email you@mail.com | sh command | py file | py expression
+
     --sessions=     Path where sessions are stored (default: $HOME/.cloudtask)
                     environment: CLOUDTASK_SESSIONS
 
@@ -73,6 +78,7 @@ from executor import CloudExecutor, CloudWorker
 from command import fmt_argv
 
 from taskconf import TaskConf
+from report import report
 
 class Task:
 
@@ -294,6 +300,8 @@ class Task:
 
         print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
                                 (session.id, len(exitcodes), session.elapsed, succeeded, failed)
+
+        report(session)
 
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
