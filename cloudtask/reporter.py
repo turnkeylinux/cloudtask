@@ -104,6 +104,20 @@ class ShellHandler:
         for var in os.environ.keys():
             if var not in self.ENV_WHITELIST:
                 del os.environ[var]
+
+        taskconf = session.taskconf
+        for attr in taskconf.__all__:
+            if attr == 'workers':
+                continue
+
+            if taskconf[attr]:
+                os.environ['CLOUDTASK_' + attr.upper()] = taskconf[attr]
+
+        if taskconf.workers:
+            os.environ['CLOUDTASK_WORKERS'] = " ".join(taskconf.workers)
+
+        os.environ
+
         os.system(self.command)
 
 class Reporter:
