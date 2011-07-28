@@ -8,6 +8,7 @@ Resolution order for options:
 3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
 
 Options:
+    --force         Don't ask for confirmation
 
     --hub-apikey=   Hub API KEY (required if launching workers)
     
@@ -89,6 +90,25 @@ class Task:
         sys.exit(1)
 
     @classmethod
+    def confirm(cls, taskconf, split, jobs):
+        print >> sys.stderr, "About to launch %d cloud servers to execute the following task:" % split
+
+        print >> sys.stderr, `jobs`
+        print >> sys.stderr, `taskconf`
+
+        orig_stdin = sys.stdin 
+        sys.stdin = os.fdopen(sys.stderr.fileno(), 'r')
+        while True:
+            answer = raw_input("Is this really what you want? [yes/no] ")
+            if answer:
+                break
+        sys.stdin = orig_stdin
+
+        if answer.lower() != "yes":
+            print >> sys.stderr, "You didn't answer 'yes'. Aborting!"
+            sys.exit(1)
+
+    @classmethod
     def main(cls):
         usage = cls.usage
         error = cls.error
@@ -96,6 +116,7 @@ class Task:
         try:
             opts, args = getopt.getopt(sys.argv[1:], 
                                        'h', ['help', 
+                                             'force',
                                              'resume=',
                                              'sessions='] +
                                             [ attr.replace('_', '-') + '=' 
@@ -104,6 +125,7 @@ class Task:
             usage(e)
 
         opt_resume = None
+        opt_force = False
 
         if cls.SESSIONS:
             opt_sessions = cls.SESSIONS
@@ -130,6 +152,9 @@ class Task:
 
                 opt_sessions = val
 
+            elif opt == '--force':
+                opt_force = True
+
         if opt_resume:
             session = Session(opt_sessions, id=opt_resume)
             taskconf = session.taskconf
@@ -148,7 +173,7 @@ class Task:
                 taskconf.overlay = abspath(join(dirname(sys.argv[0]), taskconf.overlay))
 
         for opt, val in opts:
-            if opt in ('--resume', '--sessions'):
+            if opt in ('--resume', '--sessions', '--force'):
                 continue
 
             if opt == '--overlay':
@@ -236,6 +261,9 @@ class Task:
 
         if split > len(jobs):
             split = len(jobs)
+
+        if os.isatty(sys.stderr.fileno()) and not opt_force :
+            cls.confirm(taskconf, split, jobs)
 
         if not session:
             session = Session(opt_sessions)
