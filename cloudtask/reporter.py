@@ -1,5 +1,6 @@
-import re
+import os
 from os.path import *
+import re
 
 def report(session):
     taskconf = session.taskconf
@@ -26,12 +27,25 @@ class PythonHandler:
 
         eval(self.code, {}, vars)
 
-class DummyHandler:
+class MailHandler:
     def __init__(self, expr):
-        self.expr = expr
-    
+        pass
+
     def __call__(self, session):
-        print self.expr
+        pass
+
+class ShellHandler:
+    ENV_WHITELIST = ('HOME', 'PATH', 'USER', 'SHELL')
+    def __init__(self, expr):
+        self.command = expr
+
+    def __call__(self, session):
+        os.chdir(session.paths.path)
+
+        for var in os.environ.keys():
+            if var not in self.ENV_WHITELIST:
+                del os.environ[var]
+        os.system(self.command)
 
 class Reporter:
     class Error(Exception):
@@ -39,6 +53,8 @@ class Reporter:
 
     handlers = {
         'py': PythonHandler,
+        'sh': ShellHandler,
+        'mail': MailHandler
     }
 
     def __init__(self, hook):
