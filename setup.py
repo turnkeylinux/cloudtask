@@ -1,23 +1,12 @@
-import re
-import os.path
-import commands
-
 from distutils.core import setup
-
-class ExecError(Exception):
-    pass
-
-def _getoutput(command):
-    status, output = commands.getstatusoutput(command)
-    if status != 0:
-        raise ExecError()
-    return output
+from executil import getoutput
+from os.path import *
 
 def get_version():
-    if not os.path.exists("debian/changelog"):
+    if not exists("debian/changelog"):
         return None
 
-    output = _getoutput("dpkg-parsechangelog")
+    output = getoutput("dpkg-parsechangelog")
     version = [ line.split(" ")[1]
                 for line in output.split("\n")
                 if line.startswith("Version:") ][0]
@@ -37,27 +26,13 @@ def parse_control(control):
 
     return d
 
-def parse_email(email):
-    m = re.match(r'(.*)\s*<(.*)>', email.strip())
-    if m:
-        name, address = m.groups()
-    else:
-        name = ""
-        address = email
-
-    return name.strip(), address.strip()
-
 def main():
     control_fields = parse_control(file("debian/control").read())
-    maintainer = control_fields['Maintainer']
-    maintainer_name, maintainer_email = parse_email(maintainer)
 
     setup(packages = ['cloudtask'],
           # non-essential meta-data
           name=control_fields['Source'],
           version=get_version(),
-          maintainer=maintainer_name,
-          maintainer_email=maintainer_email,
           description=control_fields['Description'])
 
 if __name__=="__main__":
