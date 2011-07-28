@@ -69,7 +69,8 @@ install:
 	fi
 
 	install -d $(PATH_BIN) $(PATH_INSTALL_LIB)
-	cp *.py $(PATH_INSTALL_LIB)
+	cp $$(echo *.py | sed 's/\bsetup.py\b//') $(PATH_INSTALL_LIB)
+
 	python setup.py install --prefix $(prefix)
 
 	$(call with-py-executables, \
