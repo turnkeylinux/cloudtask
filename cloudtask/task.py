@@ -5,54 +5,33 @@ Execute commands in the cloud
 Resolution order for options:
 1) command line (highest precedence)
 2) task-level default
-3) environment variable (lowest precedence)
+3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
 
 Options:
 
     --hub-apikey=   Hub API KEY (required if launching workers)
-                    environment: CLOUDTASK_APIKEY | HUB_APIKEY
-
+    
     --ec2-region=   Region for instance launch (default: us-east-1)
-                    environment: CLOUDTASK_EC2_REGION
-
     --ec2-size=     Instance launch size (default: m1.small)
-                    environment: CLOUDTASK_EC2_SIZE
-
     --ec2-type=     Instance launch type <s3|ebs> (default: s3)
-                    environment: CLOUDTASK_EC2_TYPE
-
-    --user=         Username to execute commands as (default: root)
-                    environment: CLOUDTASK_USER
-                
-    --pre=          Worker setup command
-                    environment: CLOUDTASK_PRE
-
-    --post=         Worker cleanup command
-                    environment: CLOUDTASK_POST
-
-    --overlay=      Path to worker filesystem overlay
-                    environment: CLOUDTASK_OVERLAY
-
-    --workers=      List of pre-launched workers to use
-                    environment: CLOUDTASK_WORKERS
-        
-                    <workers> := path/to/file | host1,host2,...hostN
-
-    --timeout=      How many seconds to wait before giving up
-                    environment: CLOUDTASK_TIMEOUT
-
-    --split=        Number of workers to execute jobs in parallel
-                    environment: CLOUDTASK_SPLIT
-
-    --report=       Task reporting hook
-                    environment: CLOUDTASK_REPORT
-
-                    mail:your@mail.com | sh:command | py:file | py:code
 
     --sessions=     Path where sessions are stored (default: $HOME/.cloudtask)
-                    environment: CLOUDTASK_SESSIONS
 
-    --resume=       ID of session to resume
+    --user=         Username to execute commands as (default: root)
+    --pre=          Worker setup command
+    --post=         Worker cleanup command
+    --overlay=      Path to worker filesystem overlay
+    --timeout=      How many seconds to wait before giving up
+    --split=        Number of workers to execute jobs in parallel
+
+    --workers=      List of pre-launched workers to use
+        
+                    path/to/file | host-1 ... host-N
+
+    --report=       Task reporting hook, examples:
+
+                    sh: command || py: file || py: code
+                    mail: from@foo.com to@bar.com 
 
 Usage:
 
