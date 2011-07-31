@@ -94,8 +94,12 @@ class Task:
     def confirm(cls, taskconf, split, jobs):
         print >> sys.stderr, "About to launch %d cloud server%s to execute the following task:" % (split, "s" if split and split > 1 else "")
 
-        job_first = re.sub(taskconf.command + '\s*', '', jobs[0])
-        job_last = re.sub(taskconf.command + '\s*', '', jobs[-1])
+        def filter(job):
+            job = re.sub('^\s*', '', job[len(taskconf.command):])
+            return job
+
+        job_first = filter(jobs[0])
+        job_last = filter(jobs[-1])
 
         job_range = ("%s .. %s" % (job_first, job_last) 
                      if job_first != job_last else "%s" % job_first)
