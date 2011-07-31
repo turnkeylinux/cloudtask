@@ -1,0 +1,592 @@
+.\" Man page generated from reStructeredText.
+.
+.TH CLOUDTASK 8 "2011-07-31" "" "misc"
+.SH NAME
+Cloudtask \- Automatic parallelization of batch jobs in the cloud
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH SYNOPSIS
+.sp
+cloudtask [ \-opts ] [ command ]
+.sp
+cloudtask [ \-opts ] \-\-resume=SESSION_ID
+.SH ARGUMENTS
+.sp
+\fIcommand\fP := a shell command to execute. Job inputs are appended as
+arguments to this command.
+.SH OPTIONS
+.INDENT 0.0
+.TP
+.B \-\-force
+.
+Don\(aqt ask for confirmation
+.TP
+.BI \-\-hub\-apikey\fB= APIKEY
+.
+Hub API KEY (required if launching workers)
+.TP
+.BI \-\-ec2\-region\fB= REGION
+.
+Region for instance launch (default: us\-east\-1)
+.sp
+Regions:
+.sp
+us\-east\-1 (Virginia, USA)
+us\-west\-1 (California, USA)
+eu\-west\-1 (Ireland, Europe)
+ap\-southeast\-1 (Singapore, Asia)
+.TP
+.BI \-\-ec2\-size\fB= SIZE
+.
+Instance launch size (default: m1.small)
+.sp
+Sizes:
+.sp
+t1.micro (1 CPU core, 613M RAM, no tmp storage)
+m1.small (1 CPU core, 1.7G RAM, 160G tmp storage)
+c1.medium (2 CPU cores, 1.7G RAM, 350G tmp storage)
+.TP
+.BI \-\-ec2\-type\fB= TYPE
+.
+Instance launch type <s3|ebs> (default: s3)
+.TP
+.BI \-\-sessions\fB= PATH
+.
+Path where sessions are stored (default: $HOME/.cloudtask)
+.TP
+.BI \-\-user\fB= USERNAME
+.
+Username to execute commands as (default: root)
+.TP
+.BI \-\-pre\fB= COMMAND
+.
+Worker setup command
+.TP
+.BI \-\-post\fB= COMMAND
+.
+Worker cleanup command
+.TP
+.BI \-\-overlay\fB= PATH
+.
+Path to worker filesystem overlay
+.TP
+.BI \-\-timeout\fB= SECONDS
+.
+How many seconds to wait before giving up
+.TP
+.BI \-\-split\fB= NUM
+.
+Number of workers to execute jobs in parallel
+.TP
+.BI \-\-workers\fB= ADDRESSES
+.
+List of pre\-allocated workers to use
+.INDENT 7.0
+.INDENT 3.5
+.sp
+path/to/file | host\-1 ... host\-N
+.UNINDENT
+.UNINDENT
+.TP
+.BI \-\-report\fB= HOOK
+.
+Task reporting hook, examples:
+.sp
+.nf
+.ft C
+sh: command || py: file || py: code
+
+mail: from@foo.com to@bar.com
+.ft P
+.fi
+.UNINDENT
+.SH DESCRIPTION
+.sp
+Batch remote execution with automatic cloud server allocation.
+.SS Background
+.sp
+Many batch tasks can be easily broken down into units of work that can
+be executed in parallel. On cloud services such as Amazon EC2, running a
+single server for 100 hours costs the same as running 100 servers for 1
+hour. In other words, for problems that can be parallelized this makes
+it advantageous to distribute the batch on as many cloud servers as
+required to finish execution of the job in just under an hour. To take
+full advantage of these economics an easy to use, automatic system for
+launching and destroying server instances reliably on demand and
+distributing work amongst them is required.
+.sp
+Cloudtask solves this problem by automating the execution of a batch job
+on remote worker servers over SSH. The user can split up the batch
+amongst an arbitrary number of servers to speed up execution time.
+Cloudtask can automatically allocate (and later destroy) EC2 cloud
+servers as required, or the user may provide a list of suitably
+configured "persistent" servers.
+.SS Terms and definitions
+.INDENT 0.0
+.IP \(bu 2
+.
+Task: a sequence of jobs
+.IP \(bu 2
+.
+Job: a shell command representing an atomic unit of work
+.IP \(bu 2
+.
+Task template: a pre\-configured task.
+.IP \(bu 2
+.
+Session: the state of a task run at a particular time. This includes
+the task configuration, the status of jobs that have finished
+executing, and a list of jobs still pending execution.
+.IP \(bu 2
+.
+Split: the number of workers the task jobs of task are split amongst.
+.IP \(bu 2
+.
+Worker: a server running SSH a job on which we execute jobs. This can
+be a persistent server or a dynamically allocated EC2 cloud server
+instance.
+.IP \(bu 2
+.
+TurnKey Hub: a web service that cloudtask may use to launch and
+destroy TurnKey servers preconfigured to perform a given task.
+.UNINDENT
+.SS Features
+.INDENT 0.0
+.IP \(bu 2
+.
+Jobs are just simple shell commands executed remotely: there is no
+special API. Shell commands are well understood, language agnostic and
+easy to test and develop.
+.IP \(bu 2
+.
+Ad\-hoc task configuration via command line options / environment:
+cloudtask can be used directly from the command line, which is useful
+for one\-off tasks, or for experimenting/debugging a new routine
+task.
+.IP \(bu 2
+.
+Pre\-configured task templates: the configuration parameters for
+routine tasks can be embedded within a pre\-configured task template,
+which is itself executable just like cloudtask, and inherits its
+interface.
+.sp
+Under the hood a task template is implemented by defining a Python
+class that inherits Task:
+.sp
+.nf
+.ft C
+#!/usr/bin/python
+
+from cloudtask import Task
+
+class HelloWorld(Task):
+    DESCRIPTION = "This is a hello world cloudtask template"
+    COMMAND = \(aqecho hello world\(aq
+    SPLIT = 2
+    REPORT = \(aqmail: cloudtask@example.com liraz@example.com\(aq
+
+HelloWorld.main()
+.ft P
+.fi
+.IP \(bu 2
+.
+Transparent execution with real\-time logging: cloudtask provides
+real\-time logging to make it easy for the user to following the
+progress of a task. For example, the progress of any command executed
+over SSH can be followed by tailing the worker\(aqs session log:
+.sp
+.nf
+.ft C
+cd ~/.cloudtask/$session_id/workers/
+tail \-f 1234
+.ft P
+.fi
+.IP \(bu 2
+.
+Fault tolerance: cloudtask is designed to reliably survive multiple
+types of failure. For example:
+.INDENT 2.0
+.IP \(bu 2
+.
+worker servers are continually monitored for failure so that a job
+executing on a failed server may be rerouted to a working server. A
+task will continue executing so long as a single worker survives.
+.IP \(bu 2
+.
+the user can specify a per\-job timeout so that jobs that freeze up
+for whatever reason will time out gracefully without jamming upt he
+worker indefinitely.
+.IP \(bu 2
+.
+In case of Hub API failure cloudtask will wait a few seconds and try
+again.
+.UNINDENT
+.IP \(bu 2
+.
+Abort and resume capability: a task can be aborted at any time by
+pressing Ctrl\-C, or sending the TERM signal to the main process.
+After all automatically launched server instances are destroyed, the
+state of the session is saved so that it may be resumed later from
+where it left off.
+.IP \(bu 2
+.
+Reporting hook: when the execution of a session finishes a reporting
+hook may be configured to perform an arbitrary action (e.g., sending
+a notification e\-mail, updating a database, etc.). Three types of
+reporting handlers are currently supported:
+.INDENT 2.0
+.IP 1. 3
+.
+\fImail\fP: send out an e\-mail with the session log to one or more
+recipients.
+.IP 2. 3
+.
+\fIsh\fP: execute a shell command. The current working directory is set
+to the session path and the environment is populated with the
+session context.
+.IP 3. 3
+.
+\fIpy\fP: execute an arbitrary snippet of Python code. The session and
+task configuration are accessible as local variables.
+.UNINDENT
+.UNINDENT
+.SS Example usage scenario
+.sp
+Alon wants to refresh all TurnKey Linux appliances with the latest
+security updates.
+.sp
+He writes a script which accepts the name of an appliance as an
+argument, downloads the latest version from Sourceforge, extracts the
+root filesystem, installs the security updates, repackages the root
+filesystem into an appliance ISO and uploads a new version of the
+appliance back to Sourceforge.
+.sp
+After testing the script on his local Ubuntu workstation, he asks the
+Hub to launch a new TurnKey Core instance (88.1.2.3), transfers his
+script and installs whatever dependencies are required. Once everything
+is tested to work, he creates a new TKLBAM backup with captures the
+state of his master worker server.
+.sp
+Alon runs his first cloudtask test:
+.sp
+.nf
+.ft C
+echo core | cloudtask \-\-workers=88.1.2.3 refresh\-iso\-security\-updates
+.ft P
+.fi
+.sp
+Once he confirms that this single test job worked correctly, he\(aqs ready
+for the big batch job that will run on 10 servers in parallel.
+.sp
+Since this is a routine task Alon expects to repeat regularly, he
+creates a pre\-configured cloudtask template for it in $HOME/cloudtasks:
+.sp
+.nf
+.ft C
+$ mkdir $HOME/cloudtasks
+$ cd $HOME/cloudtasks
+
+$ cat > refresh\-iso << \(aqEOF\(aq
+from cloudtask import Task
+
+class RefreshISO(Task):
+    DESCRIPTION = "This task refreshes security updates on an ISO"
+    COMMAND = \(aqrefresh\-iso\-security\-updates\(aq
+    SPLIT = 10
+    REPORT = \(aqmail: cloudtask@example.com alon@example.com liraz@example.com\(aq
+
+    HUB_APIKEY = \(aqBRDUKK3WDXY3CFQ\(aq
+
+RefreshISO.main()
+
+EOF
+
+$ chmod +x ./refresh\-iso
+
+$ cat $PATH_LIST_APPLIANCES | ./refresh\-iso
+About to launch 10 cloud servers to execute the following task:
+
+  Parameter       Value
+  \-\-\-\-\-\-\-\-\-       \-\-\-\-\-
+
+  jobs            40 (appengine .. zimbra)
+  command         refresh\-iso\-security\-updates
+  hub\-apikey      5YGVPEMHJHU5EA
+  ec2\-region      us\-east\-1
+  ec2\-size        m1.small
+  ec2\-type        s3
+  user            root
+  workers         \-
+  overlay         \-
+  post            \-
+  pre             \-
+  timeout         \-
+  report          mail: cloudtask@turnkeylinux.org liraz@turnkeylinux.org
+
+Is this really what you want? [yes/no] yes
+
+session 11 (pid 29709)
+88.178.132.231 (29721): launched new worker
+88.214.141.175 (29722): launched new worker
+88.15.179.7 (29724): launched new worker
+88.229.38.128 (29723): launched new worker
+
+\&...
+.ft P
+.fi
+.sp
+45 minutes later, Alon receives an e\-mail from cloudtask that the job
+has finished. In the body is the session log detailing if errors were
+detected on any job (e.g., non\-zero exitcode), how long the session took
+to run, etc.
+.sp
+Had he wanted to, Alon could have followed the execution of the task
+jobs in real\-time by tailing the worker log files:
+.sp
+.nf
+.ft C
+tail \-f ~/.cloudtask/11/workers/29721
+.ft P
+.fi
+.SH CONFIGURATION
+.sp
+Any cloudtask configuration option that can be configured from the
+command line may also be configured through a template default, or by
+defining an environment variable.
+.sp
+Resolution order for options:
+1) command line (highest precedence)
+2) task\-level default
+3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
+.sp
+For example, if you want to configure the ec2 region worker instances
+are launched in, you can configure it as:
+.INDENT 0.0
+.IP 1. 3
+.
+The \-\-ec2\-region command line option:
+.sp
+.nf
+.ft C
+$ cloudtask \-\-ec2\-region ap\-southeast\-1
+.ft P
+.fi
+.IP 2. 3
+.
+By defining EC2_REGION in a task template:
+.sp
+.nf
+.ft C
+$ cat > foo.py << \(aqEOF\(aq
+
+from cloudtask import Task
+
+class Foo(Task):
+    EC2_REGION = \(aqap\-southeast\-1\(aq
+
+Foo.main()
+EOF
+
+$ chmod +x ./foo.py
+$ ./foo.py
+.ft P
+.fi
+.IP 3. 3
+.
+By setting the CLOUDTASK_EC2_REGION environment variable:
+.sp
+.nf
+.ft C
+export CLOUDTASK_EC2_REGION=ap\-southeast\-1
+.ft P
+.fi
+.UNINDENT
+.SH EXPLORING CLOUDTASK
+.sp
+Since launching and destroying cloud servers can take a few minutes, the
+easiest way to explore and experiment with cloudtask is to run a local
+ssh server:
+.sp
+.nf
+.ft C
+# you need root privileges to install SSH
+apt\-get install openssh\-server
+/etc/init.d/ssh start
+.ft P
+.fi
+.sp
+Add your user\(aqs SSH key to root\(aqs authorized keys:
+.sp
+.nf
+.ft C
+ssh\-copy\-id root@localhost
+.ft P
+.fi
+.sp
+Then run test tasks with the \-\-workers=localhost option, like this:
+.sp
+.nf
+.ft C
+seq 10 | cloudtask \-\-workers=localhost echo
+.ft P
+.fi
+.SH BEST PRACTICES FOR PRODUCTION USE
+.sp
+For production use, it is recommended to create pre\-configured templates
+for routine jobs in a Git repository. Templates may inherit shared
+definitions such as the Hub APIKEY or the reporting hook from a common
+module:
+.sp
+.nf
+.ft C
+$ cat > common.py << \(aqEOF\(aq
+from cloudtask import Task
+class BaseTask(Task):
+    HUB_APIKEY = \(aqBRDUKK3WDXY3CFQ\(aq
+    REPORT = \(aqmail: cloudtask@example.com alon@example.com liraz@example.com\(aq
+
+    # save sessions in the local directory ratehr than
+    # $HOME/.cloudtask. That way we can easily track the session
+    # logs in Git too.
+    SESSIONS = \(aqsessions/\(aq
+EOF
+
+$ cat > helloworld << \(aqEOF\(aq
+from common import BaseTask
+class HelloWorld(BaseTask):
+    COMMAND = \(aqecho hello world\(aq
+
+HelloWorld.main()
+EOF
+.ft P
+.fi
+.SH HOW IT WORKS
+.sp
+When the user executes a task, the following steps are performed:
+.INDENT 0.0
+.IP 1. 3
+.
+A temporary SSH session key is created.
+.sp
+The initial authentication to workers assumes you have set up an SSH
+agent or equivalent (cloudtask does not support password
+authentication).
+.sp
+The temporary session key will be added to the worker\(aqs authorized
+keys for the duration of the task run, and then removed. We need to
+authorize a temporary session key to ensure access to the workers
+without relying on the SSH agent.
+.IP 2. 3
+.
+Workers are allocated.
+.sp
+Worker cloud servers are launched automatically by cloudtask to
+satisfy the requested split unless enough pre\-allocated workers are
+provided via the \-\-workers option.
+.sp
+A TKLBAM backup id may be provided to install the required job
+execution dependencies (e.g., scripts, packages, etc.) on top of
+TurnKey Core.
+.IP 3. 3
+.
+Worker setup.
+.sp
+After workers are allocated they are set up. The temporary session
+key is added to the authorized keys, the overlay is applied to the
+root filesystem (if the user has configured an overlay) and the pre
+command is executed (if the user has configured a pre command).
+.IP 4. 3
+.
+Job execution.
+.sp
+Cloudtask feeds a list of all jobs that make up the task into an
+job queue. Every remote worker has a local supervisor process which
+reads a job command from the queue and executes it over SSH on the
+worker.
+.sp
+The job may time out before it has completed if a \-\-timeout has been
+configured.
+.sp
+While the job is executing, the supervising process will periodically
+check that the worker is still alive every 30 seconds if the job
+doesn\(aqt generate any console output. If a worker is no longer
+reachable, it is destroyed and the aborted job is put back into the
+job queue for execution by another worker.
+.IP 5. 3
+.
+Worker cleanup
+.sp
+When there are no job commands left in the input Queue to provide a
+worker it is cleaned up by running the post command, removing the
+temporary session key from the authorized keys.
+.sp
+If cloudtask launched the worker, it will also destroy it at this
+point to halt incremental usage fees.
+.IP 6. 3
+.
+Session reporting
+.sp
+A reporting hook may be configured that performs an action once the
+session has finished executing. 3 types of reporting hooks are
+supported:
+.INDENT 3.0
+.IP 1. 3
+.
+mail: uses /usr/sbin/sendmail to send a simple unencrypted e\-mail
+containing the session log in the body.
+.IP 2. 3
+.
+sh: executes a shell command, with the task configuration embedded
+in the environment and the current working directory set to the
+session path. You can test the execution context like this:
+.sp
+.nf
+.ft C
+\-\-report=\(aqsh: env && pwd\(aq
+.ft P
+.fi
+.IP 3. 3
+.
+py: executes a Python code snippet with the session values set as
+local variables. You can test the execution context like this:
+.sp
+.nf
+.ft C
+\-\-report=\(aqpy: import pprint; pprint.pprint(locals())\(aq
+.ft P
+.fi
+.UNINDENT
+.UNINDENT
+.SH SEE ALSO
+.sp
+\fBcloudtask\-launch\-workers\fP (8), \fBcloudtask\-destroy\-workers\fP (8)
+.SH AUTHOR
+Liraz Siri <liraz@turnkeylinux.org>
+.\" Generated by docutils manpage writer.
+.\" 
+.

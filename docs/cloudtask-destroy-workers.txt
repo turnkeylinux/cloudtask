@@ -1,0 +1,59 @@
+=========================
+cloudtask-destroy-workers
+=========================
+
+-----------------------------------
+Destroy pre-allocated cloud workers
+-----------------------------------
+
+:Author: Liraz Siri <liraz@turnkeylinux.org>
+:Date:   2011-07-31
+:Manual section: 8
+:Manual group: misc
+
+SYNOPSIS
+========
+
+cloudtask-destroy-workers [ -opts ] ( path/to/list-of-ips | - )
+
+DESCRIPTION
+===========
+
+Destroy and unregister cloud workers from the Hub and remove their
+addresses from text file listing.
+
+ARGUMENTS
+=========
+
+`path/to/list-of-ips` := the file location of a text file containing a
+list of IP addresses of workers to destroy. IPs of workers that are
+sucessfully destroyed will be removed from this list.
+
+If '-' is specified, read list of IPs from stdin.
+
+OPTIONS
+=======
+
+--apikey      Hub APIKEY
+              Environment: HUB_APIKEY
+
+RETURN CODES
+============
+
+0   destroyed all workers
+
+1   fatal error
+
+2   couldn't destroy some workers
+
+USAGE EXAMPLES
+==============
+
+cloudtask-destroy-workers worker-ips.txt
+
+cat workers-ips | cloudtask-destroy-workers -
+
+SEE ALSO
+========
+
+``cloudtask`` (8), ``cloudtask-launch-workers`` (8)

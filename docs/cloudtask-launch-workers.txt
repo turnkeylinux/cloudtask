@@ -1,0 +1,87 @@
+========================
+cloudtask-launch-workers
+========================
+
+------------------------------
+Pre-allocate cloudtask workers
+------------------------------
+
+:Author: Liraz Siri <liraz@turnkeylinux.org>
+:Date:   2011-07-31
+:Manual section: 8
+:Manual group: misc
+
+SYNOPSIS
+========
+
+cloudtask-launch-workers [ -opts ] howmany ( path/to/list-of-ips | - )
+
+DESCRIPTION
+===========
+
+Launch new cloud workers and write list of addresses to a file.
+
+cloudtask can launch and destroy cloud workers automatically when
+needed, but it can also accept a list of pre-allocated workers via the
+--workers option. This command launches workers and creates a list of
+addresses which you can feed to cloudtask. This allows you to manage the
+pool of workers for a task or series of tasks by hand, which may be
+desirable for various reasons (e.g., launching workers takes time,
+billing is performed at a 1-hour resolution, etc.)
+
+ARGUMENTS
+=========
+
+`howmany` := number of workers to launch
+
+`path/to/list-of-ips` := file location to save IP addresses of launched
+workers. If '-' then print addresses to stdout.
+
+OPTIONS
+=======
+
+--apikey      
+  Hub APIKEY
+
+  Environment: HUB_APIKEY
+
+--region      
+  Region for instance launch (default: us-east-1)
+
+  Regions::
+
+    us-east-1 (Virginia, USA)
+    us-west-1 (California, USA)
+    eu-west-1 (Ireland, Europe)
+    ap-southeast-1 (Singapore, Asia)
+
+--size        
+  Instance size (default: m1.small)
+
+  Sizes::
+
+    t1.micro (1 CPU core, 613M RAM, no tmp storage)
+    m1.small (1 CPU core, 1.7G RAM, 160G tmp storage)
+    c1.medium (2 CPU cores, 1.7G RAM, 350G tmp storage)
+
+--type        
+  Instance type <s3|ebs> (default: s3)
+
+--label       
+  Hub description label for all launched servers
+
+USAGE EXAMPLES
+==============
+
+::
+
+    # create workers.txt file with list of new worker addresses
+    cloudtask-launch-workers 10 workers.txt
+
+    # append list of worker addresses to a file
+    cloudtask-launch-workers 10 - >> workers.txt
+
+SEE ALSO
+========
+
+``cloudtask`` (8), ``cloudtask-destroy-workers`` (8)

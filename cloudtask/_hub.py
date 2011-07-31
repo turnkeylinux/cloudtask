@@ -9,7 +9,7 @@ class Hub:
     class Error(Exception):
         pass
 
-    def __init__(self, apikey, wait_first=30, wait_status=15, wait_retry=5, retries=2):
+    def __init__(self, apikey, wait_first=5, wait_status=0, wait_retry=5, retries=2):
 
         self.apikey = apikey
         self.wait_first = wait_first
