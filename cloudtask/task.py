@@ -244,10 +244,6 @@ class Task:
         else:
             reporter = None
 
-        split = taskconf.split if taskconf.split else 1
-        if len(taskconf.workers) < split and not taskconf.hub_apikey:
-            error("please provide a HUB APIKEY or more pre-launched workers")
-
         if opt_resume:
             if args:
                 error("--resume incompatible with a command")
@@ -289,8 +285,12 @@ class Task:
 
                 jobs.append(job)
 
+        split = taskconf.split if taskconf.split else 1
         if split > len(jobs):
             split = len(jobs)
+
+        if len(taskconf.workers) < split and not taskconf.hub_apikey:
+            error("please provide a HUB APIKEY or more pre-launched workers")
 
         if os.isatty(sys.stderr.fileno()) and not opt_force :
             cls.confirm(taskconf, split, jobs)
