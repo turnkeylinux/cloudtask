@@ -1,5 +1,5 @@
 =========
-Cloudtask
+CloudTask
 =========
 
 ----------------------------------------------------
@@ -106,10 +106,10 @@ full advantage of these economics an easy to use, automatic system for
 launching and destroying server instances reliably on demand and
 distributing work amongst them is required. 
 
-Cloudtask solves this problem by automating the execution of a batch job
+CloudTask solves this problem by automating the execution of a batch job
 on remote worker servers over SSH. The user can split up the batch
 amongst an arbitrary number of servers to speed up execution time.
-Cloudtask can automatically allocate (and later destroy) EC2 cloud
+CloudTask can automatically allocate (and later destroy) EC2 cloud
 servers as required, or the user may provide a list of suitably
 configured "persistent" servers.
 
@@ -418,7 +418,7 @@ When the user executes a task, the following steps are performed:
 
 4) Job execution.
 
-   Cloudtask feeds a list of all jobs that make up the task into an
+   CloudTask feeds a list of all jobs that make up the task into an
    job queue. Every remote worker has a local supervisor process which
    reads a job command from the queue and executes it over SSH on the
    worker.

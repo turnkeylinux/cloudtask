@@ -4,7 +4,7 @@
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 <meta name="generator" content="Docutils 0.7: http://docutils.sourceforge.net/" />
-<title>Cloudtask</title>
+<title>CloudTask</title>
 <meta name="author" content="Liraz Siri &lt;liraz&#64;turnkeylinux.org&gt;" />
 <meta name="date" content="2011-07-31" />
 <style type="text/css">
@@ -313,7 +313,7 @@ ul.auto-toc {
 </head>
 <body>
 <div class="document" id="cloudtask">
-<h1 class="title">Cloudtask</h1>
+<h1 class="title">CloudTask</h1>
 <h2 class="subtitle" id="automatic-parallelization-of-batch-jobs-in-the-cloud">Automatic parallelization of batch jobs in the cloud</h2>
 <table class="docinfo" frame="void" rules="none">
 <col class="docinfo-name" />
@@ -436,10 +436,10 @@ required to finish execution of the job in just under an hour. To take
 full advantage of these economics an easy to use, automatic system for
 launching and destroying server instances reliably on demand and
 distributing work amongst them is required.</p>
-<p>Cloudtask solves this problem by automating the execution of a batch job
+<p>CloudTask solves this problem by automating the execution of a batch job
 on remote worker servers over SSH. The user can split up the batch
 amongst an arbitrary number of servers to speed up execution time.
-Cloudtask can automatically allocate (and later destroy) EC2 cloud
+CloudTask can automatically allocate (and later destroy) EC2 cloud
 servers as required, or the user may provide a list of suitably
 configured &quot;persistent&quot; servers.</p>
 </div>
@@ -735,7 +735,7 @@ root filesystem (if the user has configured an overlay) and the pre
 command is executed (if the user has configured a pre command).</p>
 </li>
 <li><p class="first">Job execution.</p>
-<p>Cloudtask feeds a list of all jobs that make up the task into an
+<p>CloudTask feeds a list of all jobs that make up the task into an
 job queue. Every remote worker has a local supervisor process which
 reads a job command from the queue and executes it over SSH on the
 worker.</p>
