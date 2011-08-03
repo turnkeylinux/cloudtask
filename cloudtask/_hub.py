@@ -14,6 +14,7 @@ class Hub:
         self.apikey = apikey
         self.wait_first = wait_first
         self.wait_status = wait_status
+        self.wait_retry = wait_retry
         self.retries = retries
 
     def retry(self, callable, *args, **kwargs):
@@ -22,6 +23,9 @@ class Hub:
                 return callable(*args, **kwargs)
             except HubAPIError, e:
                 if e.name == 'HubAccount.InvalidApiKey':
+                    raise self.Error(e)
+
+                if e.name == 'BackupRecord.NotFound':
                     raise self.Error(e)
 
                 time.sleep(self.wait_retry)
@@ -39,9 +43,14 @@ class Hub:
 
         time_started = time.time()
         kwargs.update(sec_updates='SKIP')
+
+        name = kwargs.pop('backup_id', None)
+        if not name:
+            name = 'core'
+
         while True:
             if len(pending_ids) < howmany:
-                server = retry(hub.servers.launch, 'core', **kwargs)
+                server = retry(hub.servers.launch, name, **kwargs)
                 pending_ids.add(server.instanceid)
 
             if time.time() - time_started < self.wait_first:

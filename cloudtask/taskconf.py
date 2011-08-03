@@ -7,12 +7,13 @@ class TaskConf:
     post = None
     overlay = None
 
-    hub_apikey = None
     timeout = None
 
     split = None
     workers = []
 
+    hub_apikey = None
+    backup_id = None
     ec2_region = 'us-east-1'
     ec2_size = 'm1.small'
     ec2_type = 's3'
@@ -49,4 +50,6 @@ class TaskConf:
                        for attr in self.__all__ 
                        if attr.startswith('ec2_') ])
         opts['label'] = 'Cloudtask: ' + self.command
+        if self.backup_id:
+            opts['backup_id'] = self.backup_id
         return opts

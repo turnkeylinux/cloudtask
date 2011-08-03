@@ -11,6 +11,8 @@ Options:
     --apikey      Hub APIKEY
                   Environment: HUB_APIKEY
 
+    --backup-id   TurnKey Backup ID to restore
+
     --region      Region for instance launch (default: us-east-1)
                   Regions:
 
@@ -64,15 +66,17 @@ def main():
         'size': "m1.small",
         'type': "s3",
         'label': "Cloudtask worker",
+        'backup_id': None,
     }
 
     apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
     
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 
-                                   'h', [ 'help',
-                                          'apikey=' ] + 
-                                        [ key + '=' for key in kwargs ])
+        opts, args = getopt.gnu_getopt(sys.argv[1:], 
+                                       'h', [ 'help',
+                                              'apikey=' ] + 
+                                            [ key.replace('_', '-') + '=' 
+                                              for key in kwargs ])
     except getopt.GetoptError, e:
         usage(e)
 
@@ -84,7 +88,7 @@ def main():
             apikey = val
 
         for key in kwargs:
-            if opt == '--' + key:
+            if opt == '--' + key.replace('_', '-'):
                 kwargs[key] = val
                 break
 

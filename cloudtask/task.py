@@ -8,31 +8,31 @@ Resolution order for options:
 3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
 
 Options:
-    --force         Don't ask for confirmation
+    --force          Don't ask for confirmation
 
-    --hub-apikey=   Hub API KEY (required if launching workers)
-    
-    --ec2-region=   Region for instance launch (default: us-east-1)
-    --ec2-size=     Instance launch size (default: m1.small)
-    --ec2-type=     Instance launch type <s3|ebs> (default: s3)
+    --hub-apikey=    Hub API KEY (required if launching workers)
+    --backup-id=     TurnKey Backup ID to restore on launch
+    --ec2-region=    Region for instance launch (default: us-east-1)
+    --ec2-size=      Instance launch size (default: m1.small)
+    --ec2-type=      Instance launch type <s3|ebs> (default: s3)
 
-    --sessions=     Path where sessions are stored (default: $HOME/.cloudtask)
+    --sessions=      Path where sessions are stored (default: $HOME/.cloudtask)
 
-    --user=         Username to execute commands as (default: root)
-    --pre=          Worker setup command
-    --post=         Worker cleanup command
-    --overlay=      Path to worker filesystem overlay
-    --timeout=      How many seconds to wait before giving up
-    --split=        Number of workers to execute jobs in parallel
+    --user=          Username to execute commands as (default: root)
+    --pre=           Worker setup command
+    --post=          Worker cleanup command
+    --overlay=       Path to worker filesystem overlay
+    --timeout=       How many seconds to wait before giving up
+    --split=         Number of workers to execute jobs in parallel
 
-    --workers=      List of pre-launched workers to use
+    --workers=       List of pre-launched workers to use
         
-                    path/to/file | host-1 ... host-N
+                     path/to/file | host-1 ... host-N
 
-    --report=       Task reporting hook, examples:
+    --report=        Task reporting hook, examples:
 
-                    sh: command || py: file || py: code
-                    mail: from@foo.com to@bar.com 
+                     sh: command || py: file || py: code
+                     mail: from@foo.com to@bar.com 
 
 Usage:
 
@@ -107,7 +107,8 @@ class Task:
         table = [ ('jobs', '%d (%s)' % (len(jobs), job_range)) ]
 
         for attr in ('command', 'hub-apikey', 
-                     'ec2-region', 'ec2-size', 'ec2-type', 'user', 'workers', 
+                     'ec2-region', 'ec2-size', 'ec2-type', 
+                     'user', 'backup-id', 'workers', 
                      'overlay', 'post', 'pre', 'timeout', 'report'):
 
             val = taskconf[attr.replace('-', '_')]
@@ -222,6 +223,15 @@ class Task:
 
                 if taskconf.split == 1:
                     taskconf.split = None
+
+            elif opt == '--backup-id':
+                try:
+                    taskconf.backup_id = int(val)
+                except ValueError:
+                    error("--backup-id '%s' is not an integer " % val)
+
+                if taskconf.backup_id < 1:
+                    error("--backup-id can't be smaller than 1")
 
             else:
                 opt = opt[2:]
