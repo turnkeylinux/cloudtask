@@ -153,19 +153,19 @@ launching and destroying server instances reliably on demand and
 distributing work amongst them is required.
 .sp
 CloudTask solves this problem by automating the execution of a batch job
-on remote worker servers over SSH. The user can split up the batch
-amongst an arbitrary number of servers to speed up execution time.
-CloudTask can automatically allocate (and later destroy) EC2 cloud
-servers as required, or the user may provide a list of suitably
-configured "persistent" servers.
+on remote worker servers over SSH. The user can split up the batch so
+that its parts run in parallel amongst an arbitrary number of servers to
+speed up execution time.  CloudTask can automatically allocate (and
+later destroy) EC2 cloud servers as required, or the user may provide a
+list of suitably configured "persistent" servers.
 .SS Terms and definitions
 .INDENT 0.0
 .IP \(bu 2
 .
-Task: a sequence of jobs
+Job: a shell command representing an atomic unit of work
 .IP \(bu 2
 .
-Job: a shell command representing an atomic unit of work
+Task: a sequence of jobs
 .IP \(bu 2
 .
 Task template: a pre\-configured task.
@@ -328,6 +328,7 @@ from cloudtask import Task
 
 class RefreshISO(Task):
     DESCRIPTION = "This task refreshes security updates on an ISO"
+    BACKUP_ID = 123
     COMMAND = \(aqrefresh\-iso\-security\-updates\(aq
     SPLIT = 10
     REPORT = \(aqmail: cloudtask@example.com alon@example.com liraz@example.com\(aq
@@ -353,6 +354,7 @@ About to launch 10 cloud servers to execute the following task:
   ec2\-size        m1.small
   ec2\-type        s3
   user            root
+  backup\-id       123
   workers         \-
   overlay         \-
   post            \-
@@ -385,7 +387,36 @@ jobs in real\-time by tailing the worker log files:
 tail \-f ~/.cloudtask/11/workers/29721
 .ft P
 .fi
-.SH CONFIGURATION
+.SH GETTING STARTED
+.sp
+Since launching and destroying cloud servers can take a few minutes, the
+easiest way to get started and explore cloudtask is to experiment with a
+local ssh server:
+.sp
+.nf
+.ft C
+# you need root privileges to install SSH
+apt\-get install openssh\-server
+/etc/init.d/ssh start
+.ft P
+.fi
+.sp
+Add your user\(aqs SSH key to root\(aqs authorized keys:
+.sp
+.nf
+.ft C
+ssh\-copy\-id root@localhost
+.ft P
+.fi
+.sp
+Then run test tasks with the \-\-workers=localhost option, like this:
+.sp
+.nf
+.ft C
+seq 10 | cloudtask \-\-workers=localhost echo
+.ft P
+.fi
+.SH TASK CONFIGURATION
 .sp
 Any cloudtask configuration option that can be configured from the
 command line may also be configured through a template default, or by
@@ -438,41 +469,12 @@ export CLOUDTASK_EC2_REGION=ap\-southeast\-1
 .ft P
 .fi
 .UNINDENT
-.SH EXPLORING CLOUDTASK
+.SS BEST PRACTICES FOR PRODUCTION USE
 .sp
-Since launching and destroying cloud servers can take a few minutes, the
-easiest way to explore and experiment with cloudtask is to run a local
-ssh server:
-.sp
-.nf
-.ft C
-# you need root privileges to install SSH
-apt\-get install openssh\-server
-/etc/init.d/ssh start
-.ft P
-.fi
-.sp
-Add your user\(aqs SSH key to root\(aqs authorized keys:
-.sp
-.nf
-.ft C
-ssh\-copy\-id root@localhost
-.ft P
-.fi
-.sp
-Then run test tasks with the \-\-workers=localhost option, like this:
-.sp
-.nf
-.ft C
-seq 10 | cloudtask \-\-workers=localhost echo
-.ft P
-.fi
-.SH BEST PRACTICES FOR PRODUCTION USE
-.sp
-For production use, it is recommended to create pre\-configured templates
-for routine jobs in a Git repository. Templates may inherit shared
-definitions such as the Hub APIKEY or the reporting hook from a common
-module:
+For production use, it is recommended to create pre\-configured task
+templates for routine jobs in a Git repository. Task templates may
+inherit shared definitions such as the Hub APIKEY or the reporting hook
+from a common module:
 .sp
 .nf
 .ft C
@@ -489,12 +491,14 @@ class BaseTask(Task):
 EOF
 
 $ cat > helloworld << \(aqEOF\(aq
+#!/usr/bin/python
 from common import BaseTask
 class HelloWorld(BaseTask):
     COMMAND = \(aqecho hello world\(aq
 
 HelloWorld.main()
 EOF
+chmod +x helloworld
 .ft P
 .fi
 .SH HOW IT WORKS

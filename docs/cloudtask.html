@@ -440,17 +440,17 @@ full advantage of these economics an easy to use, automatic system for
 launching and destroying server instances reliably on demand and
 distributing work amongst them is required.</p>
 <p>CloudTask solves this problem by automating the execution of a batch job
-on remote worker servers over SSH. The user can split up the batch
-amongst an arbitrary number of servers to speed up execution time.
-CloudTask can automatically allocate (and later destroy) EC2 cloud
-servers as required, or the user may provide a list of suitably
-configured &quot;persistent&quot; servers.</p>
+on remote worker servers over SSH. The user can split up the batch so
+that its parts run in parallel amongst an arbitrary number of servers to
+speed up execution time.  CloudTask can automatically allocate (and
+later destroy) EC2 cloud servers as required, or the user may provide a
+list of suitably configured &quot;persistent&quot; servers.</p>
 </div>
 <div class="section" id="terms-and-definitions">
 <h2>Terms and definitions</h2>
 <ul class="simple">
-<li>Task: a sequence of jobs</li>
 <li>Job: a shell command representing an atomic unit of work</li>
+<li>Task: a sequence of jobs</li>
 <li>Task template: a pre-configured task.</li>
 <li>Session: the state of a task run at a particular time. This includes
 the task configuration, the status of jobs that have finished
@@ -570,6 +570,7 @@ from cloudtask import Task
 
 class RefreshISO(Task):
     DESCRIPTION = &quot;This task refreshes security updates on an ISO&quot;
+    BACKUP_ID = 123
     COMMAND = 'refresh-iso-security-updates'
     SPLIT = 10
     REPORT = 'mail: cloudtask&#64;example.com alon&#64;example.com liraz&#64;example.com'
@@ -595,6 +596,7 @@ About to launch 10 cloud servers to execute the following task:
   ec2-size        m1.small
   ec2-type        s3
   user            root
+  backup-id       123
   workers         -
   overlay         -
   post            -
@@ -623,8 +625,27 @@ tail -f ~/.cloudtask/11/workers/29721
 </pre>
 </div>
 </div>
-<div class="section" id="configuration">
-<h1>CONFIGURATION</h1>
+<div class="section" id="getting-started">
+<h1>GETTING STARTED</h1>
+<p>Since launching and destroying cloud servers can take a few minutes, the
+easiest way to get started and explore cloudtask is to experiment with a
+local ssh server:</p>
+<pre class="literal-block">
+# you need root privileges to install SSH
+apt-get install openssh-server
+/etc/init.d/ssh start
+</pre>
+<p>Add your user's SSH key to root's authorized keys:</p>
+<pre class="literal-block">
+ssh-copy-id root&#64;localhost
+</pre>
+<p>Then run test tasks with the --workers=localhost option, like this:</p>
+<pre class="literal-block">
+seq 10 | cloudtask --workers=localhost echo
+</pre>
+</div>
+<div class="section" id="task-configuration">
+<h1>TASK CONFIGURATION</h1>
 <p>Any cloudtask configuration option that can be configured from the
 command line may also be configured through a template default, or by
 defining an environment variable.</p>
@@ -662,32 +683,12 @@ export CLOUDTASK_EC2_REGION=ap-southeast-1
 </pre>
 </li>
 </ol>
-</div>
-<div class="section" id="exploring-cloudtask">
-<h1>EXPLORING CLOUDTASK</h1>
-<p>Since launching and destroying cloud servers can take a few minutes, the
-easiest way to explore and experiment with cloudtask is to run a local
-ssh server:</p>
-<pre class="literal-block">
-# you need root privileges to install SSH
-apt-get install openssh-server
-/etc/init.d/ssh start
-</pre>
-<p>Add your user's SSH key to root's authorized keys:</p>
-<pre class="literal-block">
-ssh-copy-id root&#64;localhost
-</pre>
-<p>Then run test tasks with the --workers=localhost option, like this:</p>
-<pre class="literal-block">
-seq 10 | cloudtask --workers=localhost echo
-</pre>
-</div>
 <div class="section" id="best-practices-for-production-use">
-<h1>BEST PRACTICES FOR PRODUCTION USE</h1>
-<p>For production use, it is recommended to create pre-configured templates
-for routine jobs in a Git repository. Templates may inherit shared
-definitions such as the Hub APIKEY or the reporting hook from a common
-module:</p>
+<h2>BEST PRACTICES FOR PRODUCTION USE</h2>
+<p>For production use, it is recommended to create pre-configured task
+templates for routine jobs in a Git repository. Task templates may
+inherit shared definitions such as the Hub APIKEY or the reporting hook
+from a common module:</p>
 <pre class="literal-block">
 $ cat &gt; common.py &lt;&lt; 'EOF'
 from cloudtask import Task
@@ -702,13 +703,16 @@ class BaseTask(Task):
 EOF
 
 $ cat &gt; helloworld &lt;&lt; 'EOF'
+#!/usr/bin/python
 from common import BaseTask
 class HelloWorld(BaseTask):
     COMMAND = 'echo hello world'
 
 HelloWorld.main()
 EOF
+chmod +x helloworld
 </pre>
+</div>
 </div>
 <div class="section" id="how-it-works">
 <h1>HOW IT WORKS</h1>
