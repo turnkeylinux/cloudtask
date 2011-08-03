@@ -38,6 +38,7 @@ class Hub:
         yielded_ids = set()
 
         time_started = time.time()
+        kwargs.update(sec_updates='SKIP')
         while True:
             if len(pending_ids) < howmany:
                 server = retry(hub.servers.launch, 'core', **kwargs)
