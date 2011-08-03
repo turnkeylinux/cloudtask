@@ -2,9 +2,9 @@
 CloudTask
 =========
 
-----------------------------------------------------
-Automatic parallelization of batch jobs in the cloud
-----------------------------------------------------
+---------------------------------------------------------
+Parallel batch execution with auto-launched cloud servers
+---------------------------------------------------------
 
 :Author: Liraz Siri <liraz@turnkeylinux.org>
 :Date:   2011-07-31

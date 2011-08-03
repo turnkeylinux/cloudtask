@@ -9,4 +9,4 @@ Package: cloudtask
 Architecture: all
 Depends: python (>= 2.4), hubtools, openssh-client, turnkey-pylib (>= 0.3)
 Section: misc
-Description: Batch remote execution with automatic cloud server allocation
+Description: Parallel batch execution with auto-launched cloud servers

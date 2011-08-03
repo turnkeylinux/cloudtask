@@ -2,7 +2,7 @@
 .
 .TH CLOUDTASK 8 "2011-07-31" "" "misc"
 .SH NAME
-CloudTask \- Automatic parallelization of batch jobs in the cloud
+CloudTask \- Parallel batch execution with auto-launched cloud servers
 .
 .nr rst2man-indent-level 0
 .
