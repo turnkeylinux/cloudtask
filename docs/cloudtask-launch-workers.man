@@ -59,6 +59,10 @@ Hub APIKEY
 .sp
 Environment: HUB_APIKEY
 .TP
+.BI \-\-backup\-id\fB= ID
+.
+TurnKey Backup ID to restore on launch
+.TP
 .B \-\-region
 .
 Region for instance launch (default: us\-east\-1)

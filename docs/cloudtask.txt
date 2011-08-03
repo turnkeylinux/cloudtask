@@ -33,6 +33,9 @@ OPTIONS
 --hub-apikey=APIKEY     
   Hub API KEY (required if launching workers)
 
+--backup-id=ID
+  TurnKey Backup ID to restore on launch
+
 --ec2-region=REGION     
   Region for instance launch (default: us-east-1)
 

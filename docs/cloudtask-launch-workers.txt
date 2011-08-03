@@ -45,6 +45,9 @@ OPTIONS
 
   Environment: HUB_APIKEY
 
+--backup-id=ID
+  TurnKey Backup ID to restore on launch
+
 --region      
   Region for instance launch (default: us-east-1)
 

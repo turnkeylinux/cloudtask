@@ -50,6 +50,10 @@ Don\(aqt ask for confirmation
 .
 Hub API KEY (required if launching workers)
 .TP
+.BI \-\-backup\-id\fB= ID
+.
+TurnKey Backup ID to restore on launch
+.TP
 .BI \-\-ec2\-region\fB= REGION
 .
 Region for instance launch (default: us\-east\-1)
