@@ -15,7 +15,7 @@ Destroy + unregister cloud workers and remove their addresses from file listing
 
 Options:
 
-    --apikey      Hub APIKEY
+    --hub-apikey  Hub APIKEY
                   Environment: HUB_APIKEY
 
 Return codes:
@@ -50,12 +50,12 @@ def fatal(e):
     sys.exit(1)
 
 def main():
-    apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
+    hub_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_HUB_APIKEY'))
     
     try:
         opts, args = getopt.getopt(sys.argv[1:], 
                                    'h', [ 'help',
-                                          'apikey=' ])
+                                          'hub-apikey=' ])
     except getopt.GetoptError, e:
         usage(e)
 
@@ -63,11 +63,11 @@ def main():
         if opt in ('-h', '--help'):
             usage()
 
-        if opt == '--apikey':
-            apikey = val
+        if opt == '--hub-apikey':
+            hub_apikey = val
 
-    if not apikey:
-        fatal("missing required APIKEY")
+    if not hub_apikey:
+        fatal("missing required HUB_APIKEY")
 
     if not len(args) == 1:
         usage()
@@ -83,7 +83,7 @@ def main():
         print "no workers to destroy"
         return
     
-    destroyed = Hub(apikey).destroy(*addresses)
+    destroyed = Hub(hub_apikey).destroy(*addresses)
     if not destroyed:
         fatal("couldn't destroy any workers")
     

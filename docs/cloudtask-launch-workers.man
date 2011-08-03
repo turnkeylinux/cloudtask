@@ -53,11 +53,11 @@ workers. If \(aq\-\(aq then print addresses to stdout.
 .SH OPTIONS
 .INDENT 0.0
 .TP
-.B \-\-apikey
+.B \-\-hub\-apikey
 .
 Hub APIKEY
 .sp
-Environment: HUB_APIKEY
+Environment: HUB_APIKEY | CLOUDTASK_HUB_APIKEY
 .TP
 .BI \-\-backup\-id\fB= ID
 .

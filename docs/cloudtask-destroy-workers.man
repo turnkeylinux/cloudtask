@@ -47,10 +47,10 @@ If \(aq\-\(aq is specified, read list of IPs from stdin.
 .SH OPTIONS
 .INDENT 0.0
 .TP
-.B \-\-apikey
+.B \-\-hub\-apikey
 .
 Hub APIKEY
-Environment: HUB_APIKEY
+Environment: HUB_APIKEY | CLOUDTASK_HUB_APIKEY
 .UNINDENT
 .SH RETURN CODES
 .sp

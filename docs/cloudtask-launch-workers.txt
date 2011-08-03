@@ -40,10 +40,10 @@ workers. If '-' then print addresses to stdout.
 OPTIONS
 =======
 
---apikey      
+--hub-apikey      
   Hub APIKEY
 
-  Environment: HUB_APIKEY
+  Environment: HUB_APIKEY | CLOUDTASK_HUB_APIKEY
 
 --backup-id=ID
   TurnKey Backup ID to restore on launch

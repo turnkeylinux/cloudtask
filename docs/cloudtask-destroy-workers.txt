@@ -34,8 +34,8 @@ If '-' is specified, read list of IPs from stdin.
 OPTIONS
 =======
 
---apikey      Hub APIKEY
-              Environment: HUB_APIKEY
+--hub-apikey  Hub APIKEY
+              Environment: HUB_APIKEY | CLOUDTASK_HUB_APIKEY
 
 RETURN CODES
 ============

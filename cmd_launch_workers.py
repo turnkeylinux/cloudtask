@@ -19,28 +19,28 @@ it by hand.
 
 Options:
 
-    --apikey      Hub APIKEY
-                  Environment: HUB_APIKEY
+    --hub-apikey   Hub APIKEY
+                   Environment: HUB_APIKEY
 
-    --backup-id   TurnKey Backup ID to restore
+    --backup-id    TurnKey Backup ID to restore
 
-    --region      Region for instance launch (default: us-east-1)
-                  Regions:
+    --region       Region for instance launch (default: us-east-1)
+                   Regions:
 
-                    us-east-1 (Virginia, USA)
-                    us-west-1 (California, USA)
-                    eu-west-1 (Ireland, Europe)
-                    ap-southeast-1 (Singapore, Asia)
+                     us-east-1 (Virginia, USA)
+                     us-west-1 (California, USA)
+                     eu-west-1 (Ireland, Europe)
+                     ap-southeast-1 (Singapore, Asia)
 
-    --size        Instance size (default: m1.small)
-                  Sizes:
+    --size         Instance size (default: m1.small)
+                   Sizes:
 
-                    t1.micro (1 CPU core, 613M RAM, no tmp storage)
-                    m1.small (1 CPU core, 1.7G RAM, 160G tmp storage)
-                    c1.medium (2 CPU cores, 1.7G RAM, 350G tmp storage)
+                     t1.micro (1 CPU core, 613M RAM, no tmp storage)
+                     m1.small (1 CPU core, 1.7G RAM, 160G tmp storage)
+                     c1.medium (2 CPU cores, 1.7G RAM, 350G tmp storage)
 
-    --type        Instance type <s3|ebs> (default: s3)
-    --label       Hub description label for all launched servers
+    --type         Instance type <s3|ebs> (default: s3)
+    --label        Hub description label for all launched servers
 
 Usage examples:
 
@@ -80,12 +80,12 @@ def main():
         'backup_id': None,
     }
 
-    apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_APIKEY'))
+    hub_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_HUB_APIKEY'))
     
     try:
         opts, args = getopt.gnu_getopt(sys.argv[1:], 
                                        'h', [ 'help',
-                                              'apikey=' ] + 
+                                              'hub-apikey=' ] + 
                                             [ key.replace('_', '-') + '=' 
                                               for key in kwargs ])
     except getopt.GetoptError, e:
@@ -95,16 +95,16 @@ def main():
         if opt in ('-h', '--help'):
             usage()
 
-        if opt == '--apikey':
-            apikey = val
+        if opt == '--hub-apikey':
+            hub_apikey = val
 
         for key in kwargs:
             if opt == '--' + key.replace('_', '-'):
                 kwargs[key] = val
                 break
 
-    if not apikey:
-        fatal("missing required APIKEY")
+    if not hub_apikey:
+        fatal("missing required HUB_APIKEY")
 
     if len(args) < 2:
         usage()
@@ -126,7 +126,7 @@ def main():
 
         output = file(output, "w")
 
-    for address in Hub(apikey).launch(howmany, **kwargs):
+    for address in Hub(hub_apikey).launch(howmany, **kwargs):
         print >> output, address
 
 if __name__ == "__main__":
