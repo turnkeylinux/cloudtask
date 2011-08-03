@@ -73,32 +73,7 @@ class Hub:
                         for server in retry(hub.servers.get, refresh_cache=True)
                         if server.ipaddress in addresses ]
 
-        addresses =  dict([ (server.instanceid, server.ipaddress) 
-                             for server in destroyable ])
-
         for server in destroyable:
-            retry(server.destroy)
+            retry(server.destroy, auto_unregister=True)
 
-        destroyable_ids = set([ server.instanceid for server in destroyable ])
-
-        time.sleep(self.wait_first)
-
-        addresses_destroyed = []
-        while True:
-            servers = [ server 
-                        for server in retry(hub.servers.get, refresh_cache=True)
-                        if server.instanceid in destroyable_ids ]
-
-            done = True
-            for server in servers:
-                if server.status == 'terminated':
-                    retry(server.unregister)
-                    addresses_destroyed.append(addresses[server.instanceid])
-
-                else:
-                    done = False
-
-            if done:
-                return addresses_destroyed
-            else:
-                time.sleep(self.wait_status)
+        return [ server.ipaddress for server in destroyable ]
