@@ -168,7 +168,9 @@ class Session(object):
         if val is UNDEFINED:
             return TaskConf.fromdict(eval(file(path).read()))
         else:
-            print >> file(path, "w"), pprint.pformat(val.dict())
+            d = val.dict()
+            del d['hub_apikey']
+            print >> file(path, "w"), pprint.pformat(d)
     taskconf = property(taskconf, taskconf)
 
     @property

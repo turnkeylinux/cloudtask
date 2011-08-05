@@ -208,11 +208,11 @@ class Task:
             for attr in taskconf.__all__:
                 taskconf[attr] = getattr(cls, attr.upper())
 
-            if not taskconf.hub_apikey:
-                taskconf.hub_apikey = os.environ.get('HUB_APIKEY')
-
             if taskconf.overlay and not taskconf.overlay.startswith('/'):
                 taskconf.overlay = abspath(join(dirname(sys.argv[0]), taskconf.overlay))
+
+        if not taskconf.hub_apikey:
+            taskconf.hub_apikey = os.environ.get('HUB_APIKEY')
 
         for opt, val in opts:
             if opt in ('--resume', '--sessions', '--force'):
