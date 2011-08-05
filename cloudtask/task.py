@@ -117,7 +117,7 @@ class Task:
 
         table = [ ('jobs', '%d (%s)' % (len(jobs), job_range)) ]
 
-        for attr in ('command', 'hub-apikey', 
+        for attr in ('split', 'command', 'hub-apikey', 
                      'ec2-region', 'ec2-size', 'ec2-type', 
                      'user', 'backup-id', 'workers', 
                      'overlay', 'post', 'pre', 'timeout', 'report'):
