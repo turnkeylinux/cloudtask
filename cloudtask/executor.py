@@ -114,7 +114,7 @@ class CloudWorker:
                            login_name=taskconf.user,
                            callback=self.handle_stop)
         except SSH.Error, e:
-            self.status("ssh error: " + str(e))
+            self.status("unreachable via ssh: " + str(e))
             traceback.print_exc(file=self.wlog)
 
             raise self.Error(e)
@@ -190,9 +190,11 @@ class CloudWorker:
                 return
 
             if read_timeout.expired():
-                if not self.ssh.is_alive():
+                try:
+                    self.ssh.ping()
+                except self.ssh.Error, e:
                     ssh_command.terminate()
-                    self.status("worker died # %s" % command)
+                    self.status("worker died (%s) # %s" % (e, command))
                     raise SSH.TimeoutError
 
                 read_timeout.reset()

@@ -79,17 +79,14 @@ class SSH:
         self.login_name = login_name
         self.callback = callback
 
-        if not self.is_alive():
-            raise self.Error("%s is unreachable via ssh" % address)
+        self.ping()
 
-    def is_alive(self, timeout=TIMEOUT):
+    def ping(self, timeout=TIMEOUT):
         command = self.command('true')
         try:
             command.close(timeout)
-        except (command.TimeoutError, command.Error):
-            return False
-
-        return True
+        except (command.TimeoutError, command.Error), e:
+            raise self.Error(str(e).strip())
 
     def command(self, command, pty=False):
         return self.Command(self.address, command, 
