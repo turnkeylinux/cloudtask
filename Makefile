@@ -71,7 +71,7 @@ install:
 	install -d $(PATH_BIN) $(PATH_INSTALL_LIB)
 	cp $$(echo *.py | sed 's/\bsetup.py\b//') $(PATH_INSTALL_LIB)
 
-	python setup.py install --prefix $(prefix)
+	python setup.py install --prefix $(prefix) --install-layout=deb
 
 	$(call with-py-executables, \
 	  ln -fs $(call libpath, $$module) $(PATH_BIN)/$(progname), \
