@@ -122,7 +122,7 @@ class ShellHandler:
                 continue
 
             if taskconf[attr]:
-                os.environ['CLOUDTASK_' + attr.upper()] = taskconf[attr]
+                os.environ['CLOUDTASK_' + attr.upper()] = str(taskconf[attr])
 
         if taskconf.workers:
             os.environ['CLOUDTASK_WORKERS'] = " ".join(taskconf.workers)
