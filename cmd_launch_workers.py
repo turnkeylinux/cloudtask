@@ -58,6 +58,7 @@ import sys
 import getopt
 
 from cloudtask import Hub
+from StringIO import StringIO
 
 def usage(e=None):
     if e:
@@ -118,16 +119,19 @@ def main():
     except ValueError:
         usage("illegal howmany value '%s'" % howmany)
 
-    if output == '-':
-        output = sys.stdout
-    else:
-        if exists(output):
-            fatal("'%s' already exists, refusing to overwrite" % output)
+    if output != '-' and exists(output):
+        fatal("'%s' already exists, refusing to overwrite" % output)
 
-        output = file(output, "w")
+    sio = StringIO()
 
-    for address in Hub(hub_apikey).launch(howmany, **kwargs):
-        print >> output, address
+    try:
+        for address in Hub(hub_apikey).launch(howmany, **kwargs):
+            print >> sio, address
+    finally:
+        addresses = sio.getvalue()
+        if addresses:
+            output = sys.stdout if (output == '-') else file(output, "w")
+            output.write(addresses)
 
 if __name__ == "__main__":
     main()
