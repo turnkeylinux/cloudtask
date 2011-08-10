@@ -2,17 +2,20 @@
 import time
 import signal
 
-flag = [ True ]
+class Bool:
+    value = True
+
+flag = Bool()
 
 def handler(s, f):
     print "handler"
-    flag[0] = False
+    flag.value = False
 
 signal.signal(signal.SIGINT, handler)
 
 def callback():
-    print "flag: " + `flag[0]`
-    return flag[0]
+    print "flag: " + `flag.value`
+    return flag.value
 
 while True:
     if not callback():
