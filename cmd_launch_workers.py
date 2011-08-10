@@ -60,6 +60,8 @@ import getopt
 from cloudtask import Hub
 from StringIO import StringIO
 
+from lazyclass import lazyclass
+
 def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
@@ -119,19 +121,17 @@ def main():
     except ValueError:
         usage("illegal howmany value '%s'" % howmany)
 
-    if output != '-' and exists(output):
-        fatal("'%s' already exists, refusing to overwrite" % output)
+    if output != '-':
+        if exists(output):
+            fatal("'%s' already exists, refusing to overwrite" % output)
 
-    sio = StringIO()
+        output = lazyclass(file)(output, "w")
+    else:
+        output = sys.stdout
 
-    try:
-        for address in Hub(hub_apikey).launch(howmany, **kwargs):
-            print >> sio, address
-    finally:
-        addresses = sio.getvalue()
-        if addresses:
-            output = sys.stdout if (output == '-') else file(output, "w")
-            output.write(addresses)
+    for address in Hub(hub_apikey).launch(howmany, **kwargs):
+        print >> output, address
+        output.flush()
 
 if __name__ == "__main__":
     main()
