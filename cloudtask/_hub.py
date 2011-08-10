@@ -23,8 +23,7 @@ class Hub:
     class Stopped(Error):
         pass
 
-#    def __init__(self, apikey, wait_first=30, wait_status=10, wait_retry=5, retries=2):
-    def __init__(self, apikey, wait_first=1, wait_status=0, wait_retry=5, retries=2):
+    def __init__(self, apikey, wait_first=30, wait_status=10, wait_retry=5, retries=2):
 
         self.apikey = apikey
         self.wait_first = wait_first
@@ -78,8 +77,7 @@ class Hub:
                 stopped = callback() is False
 
             if stopped:
-                servers = [ server for server in get_pending_servers() 
-                            if server.status in ('pending', 'running') ] 
+                servers = [ server for server in get_pending_servers() ]
 
                 if not servers:
                     raise self.Stopped
@@ -94,8 +92,6 @@ class Hub:
 
             if len(pending_ids) < howmany:
                 server = retry(hub.servers.launch, name, **kwargs)
-                if len(pending_ids) == howmany - 1:
-                    server.set_boot_status('tklbam-restore')
                 pending_ids.add(server.instanceid)
 
             if time.time() - time_started < self.wait_first:
