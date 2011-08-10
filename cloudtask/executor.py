@@ -261,13 +261,16 @@ class CloudExecutor:
 
                 launchq = Queue()
                 def thread():
+
+                    def callback():
+                        return not self.event_stop.is_set()
+
                     hub = Hub(taskconf.hub_apikey)
                     i = None
                     try:
-                        for i, address in enumerate(hub.launch(new_workers, **taskconf.ec2_opts)):
+                        for i, address in enumerate(hub.launch(new_workers, callback, **taskconf.ec2_opts)):
                             launchq.put(address)
-                    except hub.Error:
-
+                    except hub.Error, e:
                         unlaunched_workers = new_workers - (i + 1) \
                                              if i is not None \
                                              else new_workers
@@ -275,7 +278,8 @@ class CloudExecutor:
                         for i in range(unlaunched_workers):
                             launchq.put(None)
 
-                        traceback.print_exc(file=session.mlog)
+                        if not isinstance(e, hub.Stopped):
+                            traceback.print_exc(file=session.mlog)
 
                 threading.Thread(target=thread).start()
 
@@ -311,4 +315,4 @@ class CloudExecutor:
     def join(self):
         if self.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
-            self._execute.stop()
+            self.stop()
