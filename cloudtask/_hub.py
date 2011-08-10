@@ -17,13 +17,21 @@ import time
 from StringIO import StringIO
 
 class Hub:
+    WAIT_FIRST = 30
+    WAIT_STATUS = 10
+    WAIT_RETRY = 5
+
+    RETRIES = 2
+
+    PENDING_TIMEOUT = 300
+
     class Error(Exception):
         pass
 
     class Stopped(Error):
         pass
 
-    def __init__(self, apikey, wait_first=30, wait_status=10, wait_retry=5, retries=2):
+    def __init__(self, apikey, wait_first=WAIT_FIRST, wait_status=WAIT_STATUS, wait_retry=WAIT_RETRY, retries=RETRIES):
 
         self.apikey = apikey
         self.wait_first = wait_first
@@ -70,13 +78,15 @@ class Hub:
                      for server in retry(hub.servers.get, refresh_cache=True)
                      if server.instanceid in (pending_ids - yielded_ids) ]
 
-        stopped = False
+        stopped = None
         while True:
 
             if callback and not stopped:
-                stopped = callback() is False
+                if callback() is False:
+                    stopped = time.time()
 
             if stopped:
+
                 servers = [ server for server in get_pending_servers() ]
 
                 if not servers:
@@ -86,6 +96,10 @@ class Hub:
                     if server.status == 'running':
                         retry(server.destroy, auto_unregister=True)
                         pending_ids.remove(server.instanceid)
+
+                    if server.status == 'pending' and \
+                       (time.time() - stopped > self.PENDING_TIMEOUT):
+                        raise self.Error("stuck pending instance")
 
                 time.sleep(self.wait_status)
                 continue
