@@ -57,9 +57,8 @@ from os.path import *
 import sys
 import getopt
 
+import signal
 from cloudtask import Hub
-from StringIO import StringIO
-
 from lazyclass import lazyclass
 
 def usage(e=None):
@@ -129,7 +128,19 @@ def main():
     else:
         output = sys.stdout
 
-    for address in Hub(hub_apikey).launch(howmany, **kwargs):
+    class Bool:
+        value = False
+    stopped = Bool()
+
+    def handler(s, f):
+        stopped.value = True
+
+    signal.signal(signal.SIGINT, handler)
+
+    def callback():
+        return not stopped.value
+
+    for address in Hub(hub_apikey).launch(howmany, callback, **kwargs):
         print >> output, address
         output.flush()
 

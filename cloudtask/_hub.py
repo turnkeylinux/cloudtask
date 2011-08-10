@@ -20,7 +20,11 @@ class Hub:
     class Error(Exception):
         pass
 
-    def __init__(self, apikey, wait_first=30, wait_status=10, wait_retry=5, retries=2):
+    class Stopped(Error):
+        pass
+
+#    def __init__(self, apikey, wait_first=30, wait_status=10, wait_retry=5, retries=2):
+    def __init__(self, apikey, wait_first=1, wait_status=0, wait_retry=5, retries=2):
 
         self.apikey = apikey
         self.wait_first = wait_first
@@ -43,8 +47,11 @@ class Hub:
 
         raise self.Error(e)
 
-    def launch(self, howmany, **kwargs):
-        """launch <howmany> workers, wait until booted and return their public IP addresses"""
+    def launch(self, howmany, callback=None, **kwargs):
+        """launch <howmany> workers, wait until booted and return their public IP addresses.
+
+        Invoke callback every frequently. If callback returns False, we terminate launching.
+        """
 
         retry = self.retry
         hub = _Hub(self.apikey)
@@ -59,19 +66,42 @@ class Hub:
         if not name:
             name = 'core'
 
+        def get_pending_servers():
+            return [ server 
+                     for server in retry(hub.servers.get, refresh_cache=True)
+                     if server.instanceid in (pending_ids - yielded_ids) ]
+
+        stopped = False
         while True:
+
+            if callback and not stopped:
+                stopped = callback() is False
+
+            if stopped:
+                servers = [ server for server in get_pending_servers() 
+                            if server.status in ('pending', 'running') ] 
+
+                if not servers:
+                    raise self.Stopped
+
+                for server in servers:
+                    if server.status == 'running':
+                        retry(server.destroy, auto_unregister=True)
+                        pending_ids.remove(server.instanceid)
+
+                time.sleep(self.wait_status)
+                continue
+
             if len(pending_ids) < howmany:
                 server = retry(hub.servers.launch, name, **kwargs)
+                if len(pending_ids) == howmany - 1:
+                    server.set_boot_status('tklbam-restore')
                 pending_ids.add(server.instanceid)
 
             if time.time() - time_started < self.wait_first:
                 continue
 
-            servers = [ server 
-                        for server in retry(hub.servers.get, refresh_cache=True)
-                        if server.instanceid in (pending_ids - yielded_ids) ]
-
-            for server in servers:
+            for server in get_pending_servers():
                 if server.status != 'running' or server.boot_status != 'booted':
                     continue
 
