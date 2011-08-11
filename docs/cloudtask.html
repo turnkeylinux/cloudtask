@@ -331,13 +331,102 @@ ul.auto-toc {
 </table>
 <div class="section" id="synopsis">
 <h1>SYNOPSIS</h1>
-<p>cloudtask [ -opts ] [ command ]</p>
+<p>cat jobs | cloudtask [ -opts ] [ command ]</p>
 <p>cloudtask [ -opts ] --resume=SESSION_ID</p>
 </div>
-<div class="section" id="arguments">
-<h1>ARGUMENTS</h1>
-<p><cite>command</cite> := a shell command to execute. Job inputs are appended as
-arguments to this command.</p>
+<div class="section" id="description">
+<h1>DESCRIPTION</h1>
+<p>Cloudtask reads job inputs from stdin, each job input on a separate line
+containing one or more command line arguments. For each job, the job
+arguments are appended to the configured command and executed via SSH on
+a worker.</p>
+</div>
+<div class="section" id="background">
+<h1>BACKGROUND</h1>
+<p>Many batch tasks can be easily broken down into units of work that can
+be executed in parallel. On cloud services such as Amazon EC2, running a
+single server for 100 hours costs the same as running 100 servers for 1
+hour. In other words, for problems that can be parallelized this makes
+it advantageous to distribute the batch on as many cloud servers as
+required to finish execution of the job in just under an hour. To take
+full advantage of these economics an easy to use, automatic system for
+launching and destroying server instances reliably on demand and
+distributing work amongst them is required.</p>
+<p>CloudTask solves this problem by automating the execution of a batch job
+on remote worker servers over SSH. The user can split up the batch so
+that its parts run in parallel amongst an arbitrary number of servers to
+speed up execution time.  CloudTask can automatically allocate (and
+later destroy) EC2 cloud servers as required, or the user may provide a
+list of suitably configured &quot;persistent&quot; servers.</p>
+</div>
+<div class="section" id="terms-and-definitions">
+<h1>TERMS AND DEFINITIONS</h1>
+<ul class="simple">
+<li>Job: a shell command representing an atomic unit of work</li>
+<li>Task: a sequence of jobs</li>
+<li>Task template: a pre-configured task.</li>
+<li>Session: the state of a task run at a particular time. This includes
+the task configuration, the status of jobs that have finished
+executing, and a list of jobs still pending execution.</li>
+<li>Split: the number of workers the task jobs of task are split amongst.</li>
+<li>Worker: a server running SSH a job on which we execute jobs. This can
+be a persistent server or a dynamically allocated EC2 cloud server
+instance.</li>
+<li>TurnKey Hub: a web service that cloudtask may use to launch and
+destroy TurnKey servers preconfigured to perform a given task.</li>
+</ul>
+</div>
+<div class="section" id="usage-basics">
+<h1>USAGE BASICS</h1>
+<pre class="literal-block">
+$ cat &gt; jobs &lt;&lt; 'EOF'
+hello
+world
+hello world
+EOF
+
+$ cat jobs | cloudtask echo executed:
+About to launch 1 cloud server to execute the following task:
+
+  Parameter       Value
+  ---------       -----
+
+  jobs            3 (hello .. hello world)
+  command         echo executed:
+  hub-apikey      BXFAVBHUEVHMCDQ
+  ec2-region      us-east-1
+  ec2-size        m1.small
+  ec2-type        s3
+  user            root
+  backup-id       -
+  workers         -
+  overlay         -
+  post            -
+  pre             -
+  timeout         -
+  report          -
+
+Is this really what you want? [yes/no] yes
+session 1 (pid 22749)
+# 2011-08-11 03:51:08 [127.137.205.30] launched new worker
+# 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello
+executed: hello
+Connection to 127.137.205.30 closed.
+# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello
+
+# 2011-08-11 03:51:09 [127.137.205.30] echo executed: world
+executed: world
+Connection to 127.137.205.30 closed.
+# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: world
+
+# 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello world
+executed: hello world
+Connection to 127.137.205.30 closed.
+# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello world
+
+session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
+# 2011-08-11 03:51:10 [127.137.205.30] destroyed worker
+</pre>
 </div>
 <div class="section" id="options">
 <h1>OPTIONS</h1>
@@ -425,46 +514,8 @@ mail: from&#64;foo.com to&#64;bar.com
 </tbody>
 </table>
 </div>
-<div class="section" id="description">
-<h1>DESCRIPTION</h1>
-<p>Batch remote execution with automatic cloud server allocation.</p>
-<div class="section" id="background">
-<h2>Background</h2>
-<p>Many batch tasks can be easily broken down into units of work that can
-be executed in parallel. On cloud services such as Amazon EC2, running a
-single server for 100 hours costs the same as running 100 servers for 1
-hour. In other words, for problems that can be parallelized this makes
-it advantageous to distribute the batch on as many cloud servers as
-required to finish execution of the job in just under an hour. To take
-full advantage of these economics an easy to use, automatic system for
-launching and destroying server instances reliably on demand and
-distributing work amongst them is required.</p>
-<p>CloudTask solves this problem by automating the execution of a batch job
-on remote worker servers over SSH. The user can split up the batch so
-that its parts run in parallel amongst an arbitrary number of servers to
-speed up execution time.  CloudTask can automatically allocate (and
-later destroy) EC2 cloud servers as required, or the user may provide a
-list of suitably configured &quot;persistent&quot; servers.</p>
-</div>
-<div class="section" id="terms-and-definitions">
-<h2>Terms and definitions</h2>
-<ul class="simple">
-<li>Job: a shell command representing an atomic unit of work</li>
-<li>Task: a sequence of jobs</li>
-<li>Task template: a pre-configured task.</li>
-<li>Session: the state of a task run at a particular time. This includes
-the task configuration, the status of jobs that have finished
-executing, and a list of jobs still pending execution.</li>
-<li>Split: the number of workers the task jobs of task are split amongst.</li>
-<li>Worker: a server running SSH a job on which we execute jobs. This can
-be a persistent server or a dynamically allocated EC2 cloud server
-instance.</li>
-<li>TurnKey Hub: a web service that cloudtask may use to launch and
-destroy TurnKey servers preconfigured to perform a given task.</li>
-</ul>
-</div>
 <div class="section" id="features">
-<h2>Features</h2>
+<h1>FEATURES</h1>
 <ul>
 <li><p class="first">Jobs are just simple shell commands executed remotely: there is no
 special API. Shell commands are well understood, language agnostic and
@@ -540,7 +591,7 @@ task configuration are accessible as local variables.</li>
 </ul>
 </div>
 <div class="section" id="example-usage-scenario">
-<h2>Example usage scenario</h2>
+<h1>EXAMPLE USAGE SCENARIO</h1>
 <p>Alon wants to refresh all TurnKey Linux appliances with the latest
 security updates.</p>
 <p>He writes a script which accepts the name of an appliance as an
@@ -624,7 +675,6 @@ jobs in real-time by tailing the worker log files:</p>
 tail -f ~/.cloudtask/11/workers/29721
 </pre>
 </div>
-</div>
 <div class="section" id="getting-started">
 <h1>GETTING STARTED</h1>
 <p>Since launching and destroying cloud servers can take a few minutes, the
@@ -684,7 +734,7 @@ export CLOUDTASK_EC2_REGION=ap-southeast-1
 </li>
 </ol>
 <div class="section" id="best-practices-for-production-use">
-<h2>BEST PRACTICES FOR PRODUCTION USE</h2>
+<h2>Best practices for production use</h2>
 <p>For production use, it is recommended to create pre-configured task
 templates for routine jobs in a Git repository. Task templates may
 inherit shared definitions such as the Hub APIKEY or the reporting hook

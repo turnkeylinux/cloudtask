@@ -88,7 +88,7 @@ class Task:
             print >> sys.stderr, "error: " + str(e)
 
         if not cls.COMMAND:
-            print >> sys.stderr, "syntax: %s [ -opts ] [ command ]" % sys.argv[0]
+            print >> sys.stderr, "syntax: cat jobs | %s [ -opts ] [ command ]" % sys.argv[0]
         else:
             print >> sys.stderr, "syntax: %s [ -opts ] [ extra args ]" % sys.argv[0]
 
