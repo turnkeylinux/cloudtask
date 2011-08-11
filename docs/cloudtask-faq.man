@@ -1,8 +1,8 @@
 .\" Man page generated from reStructeredText.
 .
-.TH CLOUDTASK FAQ 7 "2011-08-11" "" "misc"
+.TH CLOUDTASK-FAQ 7 "2011-08-11" "" "misc"
 .SH NAME
-Cloudtask FAQ \- Frequently Asked Questions
+Cloudtask-FAQ \- Frequently Asked Questions
 .
 .nr rst2man-indent-level 0
 .
