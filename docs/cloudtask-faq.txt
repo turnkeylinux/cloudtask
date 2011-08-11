@@ -1,0 +1,198 @@
+=============
+Cloudtask FAQ
+=============
+
+--------------------------
+Frequently Asked Questions
+--------------------------
+
+:Author: Liraz Siri <liraz@turnkeylinux.org>
+:Date:   2011-08-11
+:Manual section: 7
+:Manual group: misc
+
+What is a task job?
+===================
+
+A task is a sequence of jobs. Each job is essentially just a shell
+command which cloudtask creates by appending the task command to the job
+input arguments. For example, consider the following cloudtask::
+
+    seq 3 | cloudtask echo
+
+`seq 3` prints out a sequence of numbers from 1 to 3, each on a separate
+line which cloudtask appends to the `echo` command to create three
+commands::
+
+    echo 1
+    echo 2
+    echo 3
+
+Each job command should be independent, which means it shouldn't rely on
+any other job command being run before or after it on a particular
+worker. The execution order and distribution of job commands is up to
+cloudtask. If a task is split up amongst multiple workers (e.g.,
+--split=3) each job command is likely be executed on a different server.
+
+Job commands may not require any user interaction. Cloudtask can not
+interact with job commands so any attempt at user interaction (e.g., a
+confirmation dialog) will hang the job until the configured job
+--timeout elapses (1 hour by default).
+
+How do I prepare a worker for a job?
+====================================
+
+On a fresh TurnKey Core deployment install and test all the software
+(e.g., packages, custom scripts, etc.) that your job command depend on.
+This is your master worker.
+
+Backup the master using TKLBAM, and pass its backup id to cloudtask so
+that it can restore this backup on any worker it launches automatically.
+
+You can substitute or supplement a TKLBAM restore with the --pre command
+(e.g., to install a package) and/or apply an --overlay to the worker's
+filesystem.
+
+How do I provide job commands with required input data?
+=======================================================
+
+Small amounts of input data may be stored in the TKLBAM backup or
+transfered over to the worker in the overlay. 
+
+For more substantial amounts of input data, it is recommended to pull in
+data over the network (e.g., from a file server or Amazon S3).
+
+Where do I store the useful end-products of a job command?
+==========================================================
+
+Jobs should squirrel away useful end-products such as files to an
+external storage resource on the network.
+
+Any hard disk storage space on the worker should be considered temporary
+as any automatically launched worker will be destroyed at the end of the
+task along with the contents of its temporary storage space.
+
+For example if a job creates files on the local filesystem those would
+be lost when the worker is destroyed unless the they are first uploaded
+over the network to a file server, or to Amazon S3, etc.
+
+Any console output (e.g., print statements) from a job is automatically
+logged by Cloudtask.
+
+What happens if a job fails?
+============================
+
+A job is considered to have failed if the job command returns a non-zero
+exitcode. Failed jobs are not retried. They are simply logged and the
+total number of job failures reported at the end of the session. The
+worker then continues executing the next job.
+
+Are jobs divided equally amongst workers?
+=========================================
+
+Not necessarily. Workers pull job commands from a queue of jobs on a
+first come first served basis. A worker will grab the next job from the
+queue as soon as it is finished with the previous job. A fast worker or
+a worker that has received shorter jobs may execute more jobs than a
+slow worker or a worker that has received longer jobs.
+
+How does cloudtask authenticate to workers?
+===========================================
+
+Cloudtask logs into remote servers over SSH. It assumes it can do this
+without a password using SSH key authentication (e.g., your SSH key has
+been added to the worker's authorized keys). Password authentication is
+not supported.
+
+In the User Profile section the Hub allows you to configure one or more
+SSH public keys which will be added to the authorized keys of any cloud
+server launched.
+
+So I need to put my private SSH key on any remote server I run cloudtask on?
+============================================================================
+
+That's one way to do it. Another, more secure alternative would be to
+use SSH agent forwarding to log into the remote server::
+
+    ssh -A remote-server
+
+Forwarding the local SSH agent will let remote-server authentiate with
+your SSH keys without them ever leaving the security of your personal
+computer.
+
+What if a worker fails?
+=======================
+
+Cloudtask does not depend on the reliability of any single worker. If a
+worker fails while it is running a job, the job will be re-routed to one
+of the remaining workers.
+
+A worker is considered to have failed when cloudtask detects that it is
+no longer capable of executing commands over SSH (I.e., cloudtask pings
+workers periodically).
+
+It doesn't matter if this is because of a network routing problem which
+makes the worker unreachable, a software problem (e.g., kernel panic) or
+a critical performance issue such as the worker running out of memory
+and thrashing so badly into swap that it can't even accept commands over
+SSH.
+
+As usual Cloudtask takes responsibility for the destruction of workers
+it launches. A worker that has failed will be destroyed immediately.
+
+Do I have to use the Hub to launch workers?
+===========================================
+
+No that's just the easiest way to do it. Cloudtask can accept an
+arbitrary list of worker IP addresses via the --workers option. 
+
+Can I mix pre-launched workers with automatically launched workers?
+===================================================================
+
+Yes. If the --split is greater than the number of pre-launched workers
+you provide via the --workers option then Cloudtask will launch
+additional workers to satisfy the configured split.
+
+For example, if you provide a list of 5 pre-launched worker IP addresses
+and specify a task split of 15 then Cloudtask will launch an additional
+10 workers automatically.
+
+When are workers automatically destroyed?
+=========================================
+
+To minimize cloud server usage fees, Cloudtask destroys workers it
+launches as soon as it runs out of work for them to do. 
+
+But Cloudtask only takes responsibility for the destruction of workers
+it launches automatically. You can also launch workers by hand using the
+cloudtask-launch-workers command and pass them to cloudtask using the
+--workers option. In that case you are responsibile for worker
+destruction (e.g., using the cloudtask-destroy-workers command).
+
+How do I abort a task?
+======================
+
+You can abort a task safely at any time by either:
+
+1) Pressing CTRL-C on the console in which cloudtask is executing.
+2) Use kill to send the TERM signal to cloudtask session pid.
+
+What happens when I abort a task?
+=================================
+
+The execution of all currently running jobs is immediately aborted. Any
+worker instance that was automatically launched by cloudtask is
+destroyed as soon as possible. 
+
+To allow an aborted session to be later resumed, the current state of
+the task is saved in the task session. The state describes which jobs
+have finished executing and which jobs are still in the pending state.
+
+When the task is resumed any aborted jobs will be re-executed along with
+the other pending jobs.
+
+Aborting a task is not immediate because it can take anywhere from a few
+seconds to to a few minutes to safely shut down a task. For example EC2
+instances in the pending state can not be destroyed so cloudtask has to
+wait for them to reach the running state first.
+

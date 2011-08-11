@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="Docutils 0.7: http://docutils.sourceforge.net/" />
+<title>Cloudtask FAQ</title>
+<meta name="author" content="Liraz Siri &lt;liraz&#64;turnkeylinux.org&gt;" />
+<meta name="date" content="2011-08-11" />
+<style type="text/css">
+
+/*
+:Author: David Goodger (goodger@python.org)
+:Id: $Id: html4css1.css 6253 2010-03-02 00:24:53Z milde $
+:Copyright: This stylesheet has been placed in the public domain.
+
+Default cascading style sheet for the HTML output of Docutils.
+
+See http://docutils.sf.net/docs/howto/html-stylesheets.html for how to
+customize this style sheet.
+*/
+
+/* used to remove borders from tables and images */
+.borderless, table.borderless td, table.borderless th {
+  border: 0 }
+
+table.borderless td, table.borderless th {
+  /* Override padding for "table.docutils td" with "! important".
+     The right padding separates the table cells. */
+  padding: 0 0.5em 0 0 ! important }
+
+.first {
+  /* Override more specific margin styles with "! important". */
+  margin-top: 0 ! important }
+
+.last, .with-subtitle {
+  margin-bottom: 0 ! important }
+
+.hidden {
+  display: none }
+
+a.toc-backref {
+  text-decoration: none ;
+  color: black }
+
+blockquote.epigraph {
+  margin: 2em 5em ; }
+
+dl.docutils dd {
+  margin-bottom: 0.5em }
+
+/* Uncomment (and remove this text!) to get bold-faced definition list terms
+dl.docutils dt {
+  font-weight: bold }
+*/
+
+div.abstract {
+  margin: 2em 5em }
+
+div.abstract p.topic-title {
+  font-weight: bold ;
+  text-align: center }
+
+div.admonition, div.attention, div.caution, div.danger, div.error,
+div.hint, div.important, div.note, div.tip, div.warning {
+  margin: 2em ;
+  border: medium outset ;
+  padding: 1em }
+
+div.admonition p.admonition-title, div.hint p.admonition-title,
+div.important p.admonition-title, div.note p.admonition-title,
+div.tip p.admonition-title {
+  font-weight: bold ;
+  font-family: sans-serif }
+
+div.attention p.admonition-title, div.caution p.admonition-title,
+div.danger p.admonition-title, div.error p.admonition-title,
+div.warning p.admonition-title {
+  color: red ;
+  font-weight: bold ;
+  font-family: sans-serif }
+
+/* Uncomment (and remove this text!) to get reduced vertical space in
+   compound paragraphs.
+div.compound .compound-first, div.compound .compound-middle {
+  margin-bottom: 0.5em }
+
+div.compound .compound-last, div.compound .compound-middle {
+  margin-top: 0.5em }
+*/
+
+div.dedication {
+  margin: 2em 5em ;
+  text-align: center ;
+  font-style: italic }
+
+div.dedication p.topic-title {
+  font-weight: bold ;
+  font-style: normal }
+
+div.figure {
+  margin-left: 2em ;
+  margin-right: 2em }
+
+div.footer, div.header {
+  clear: both;
+  font-size: smaller }
+
+div.line-block {
+  display: block ;
+  margin-top: 1em ;
+  margin-bottom: 1em }
+
+div.line-block div.line-block {
+  margin-top: 0 ;
+  margin-bottom: 0 ;
+  margin-left: 1.5em }
+
+div.sidebar {
+  margin: 0 0 0.5em 1em ;
+  border: medium outset ;
+  padding: 1em ;
+  background-color: #ffffee ;
+  width: 40% ;
+  float: right ;
+  clear: right }
+
+div.sidebar p.rubric {
+  font-family: sans-serif ;
+  font-size: medium }
+
+div.system-messages {
+  margin: 5em }
+
+div.system-messages h1 {
+  color: red }
+
+div.system-message {
+  border: medium outset ;
+  padding: 1em }
+
+div.system-message p.system-message-title {
+  color: red ;
+  font-weight: bold }
+
+div.topic {
+  margin: 2em }
+
+h1.section-subtitle, h2.section-subtitle, h3.section-subtitle,
+h4.section-subtitle, h5.section-subtitle, h6.section-subtitle {
+  margin-top: 0.4em }
+
+h1.title {
+  text-align: center }
+
+h2.subtitle {
+  text-align: center }
+
+hr.docutils {
+  width: 75% }
+
+img.align-left, .figure.align-left, object.align-left {
+  clear: left ;
+  float: left ;
+  margin-right: 1em }
+
+img.align-right, .figure.align-right, object.align-right {
+  clear: right ;
+  float: right ;
+  margin-left: 1em }
+
+img.align-center, .figure.align-center, object.align-center {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.align-left {
+  text-align: left }
+
+.align-center {
+  clear: both ;
+  text-align: center }
+
+.align-right {
+  text-align: right }
+
+/* reset inner alignment in figures */
+div.align-right {
+  text-align: left }
+
+/* div.align-center * { */
+/*   text-align: left } */
+
+ol.simple, ul.simple {
+  margin-bottom: 1em }
+
+ol.arabic {
+  list-style: decimal }
+
+ol.loweralpha {
+  list-style: lower-alpha }
+
+ol.upperalpha {
+  list-style: upper-alpha }
+
+ol.lowerroman {
+  list-style: lower-roman }
+
+ol.upperroman {
+  list-style: upper-roman }
+
+p.attribution {
+  text-align: right ;
+  margin-left: 50% }
+
+p.caption {
+  font-style: italic }
+
+p.credits {
+  font-style: italic ;
+  font-size: smaller }
+
+p.label {
+  white-space: nowrap }
+
+p.rubric {
+  font-weight: bold ;
+  font-size: larger ;
+  color: maroon ;
+  text-align: center }
+
+p.sidebar-title {
+  font-family: sans-serif ;
+  font-weight: bold ;
+  font-size: larger }
+
+p.sidebar-subtitle {
+  font-family: sans-serif ;
+  font-weight: bold }
+
+p.topic-title {
+  font-weight: bold }
+
+pre.address {
+  margin-bottom: 0 ;
+  margin-top: 0 ;
+  font: inherit }
+
+pre.literal-block, pre.doctest-block {
+  margin-left: 2em ;
+  margin-right: 2em }
+
+span.classifier {
+  font-family: sans-serif ;
+  font-style: oblique }
+
+span.classifier-delimiter {
+  font-family: sans-serif ;
+  font-weight: bold }
+
+span.interpreted {
+  font-family: sans-serif }
+
+span.option {
+  white-space: nowrap }
+
+span.pre {
+  white-space: pre }
+
+span.problematic {
+  color: red }
+
+span.section-subtitle {
+  /* font-size relative to parent (h1..h6 element) */
+  font-size: 80% }
+
+table.citation {
+  border-left: solid 1px gray;
+  margin-left: 1px }
+
+table.docinfo {
+  margin: 2em 4em }
+
+table.docutils {
+  margin-top: 0.5em ;
+  margin-bottom: 0.5em }
+
+table.footnote {
+  border-left: solid 1px black;
+  margin-left: 1px }
+
+table.docutils td, table.docutils th,
+table.docinfo td, table.docinfo th {
+  padding-left: 0.5em ;
+  padding-right: 0.5em ;
+  vertical-align: top }
+
+table.docutils th.field-name, table.docinfo th.docinfo-name {
+  font-weight: bold ;
+  text-align: left ;
+  white-space: nowrap ;
+  padding-left: 0 }
+
+h1 tt.docutils, h2 tt.docutils, h3 tt.docutils,
+h4 tt.docutils, h5 tt.docutils, h6 tt.docutils {
+  font-size: 100% }
+
+ul.auto-toc {
+  list-style-type: none }
+
+</style>
+</head>
+<body>
+<div class="document" id="cloudtask-faq">
+<h1 class="title">Cloudtask FAQ</h1>
+<h2 class="subtitle" id="frequently-asked-questions">Frequently Asked Questions</h2>
+<table class="docinfo" frame="void" rules="none">
+<col class="docinfo-name" />
+<col class="docinfo-content" />
+<tbody valign="top">
+<tr><th class="docinfo-name">Author:</th>
+<td>Liraz Siri &lt;<a class="reference external" href="mailto:liraz&#64;turnkeylinux.org">liraz&#64;turnkeylinux.org</a>&gt;</td></tr>
+<tr><th class="docinfo-name">Date:</th>
+<td>2011-08-11</td></tr>
+<tr class="field"><th class="docinfo-name">Manual section:</th><td class="field-body">7</td>
+</tr>
+<tr class="field"><th class="docinfo-name">Manual group:</th><td class="field-body">misc</td>
+</tr>
+</tbody>
+</table>
+<div class="section" id="what-is-a-task-job">
+<h1>What is a task job?</h1>
+<p>A task is a sequence of jobs. Each job is essentially just a shell
+command which cloudtask creates by appending the task command to the job
+input arguments. For example, consider the following cloudtask:</p>
+<pre class="literal-block">
+seq 3 | cloudtask echo
+</pre>
+<p><cite>seq 3</cite> prints out a sequence of numbers from 1 to 3, each on a separate
+line which cloudtask appends to the <cite>echo</cite> command to create three
+commands:</p>
+<pre class="literal-block">
+echo 1
+echo 2
+echo 3
+</pre>
+<p>Each job command should be independent, which means it shouldn't rely on
+any other job command being run before or after it on a particular
+worker. The execution order and distribution of job commands is up to
+cloudtask. If a task is split up amongst multiple workers (e.g.,
+--split=3) each job command is likely be executed on a different server.</p>
+<p>Job commands may not require any user interaction. Cloudtask can not
+interact with job commands so any attempt at user interaction (e.g., a
+confirmation dialog) will hang the job until the configured job
+--timeout elapses (1 hour by default).</p>
+</div>
+<div class="section" id="how-do-i-prepare-a-worker-for-a-job">
+<h1>How do I prepare a worker for a job?</h1>
+<p>On a fresh TurnKey Core deployment install and test all the software
+(e.g., packages, custom scripts, etc.) that your job command depend on.
+This is your master worker.</p>
+<p>Backup the master using TKLBAM, and pass its backup id to cloudtask so
+that it can restore this backup on any worker it launches automatically.</p>
+<p>You can substitute or supplement a TKLBAM restore with the --pre command
+(e.g., to install a package) and/or apply an --overlay to the worker's
+filesystem.</p>
+</div>
+<div class="section" id="how-do-i-provide-job-commands-with-required-input-data">
+<h1>How do I provide job commands with required input data?</h1>
+<p>Small amounts of input data may be stored in the TKLBAM backup or
+transfered over to the worker in the overlay.</p>
+<p>For more substantial amounts of input data, it is recommended to pull in
+data over the network (e.g., from a file server or Amazon S3).</p>
+</div>
+<div class="section" id="where-do-i-store-the-useful-end-products-of-a-job-command">
+<h1>Where do I store the useful end-products of a job command?</h1>
+<p>Jobs should squirrel away useful end-products such as files to an
+external storage resource on the network.</p>
+<p>Any hard disk storage space on the worker should be considered temporary
+as any automatically launched worker will be destroyed at the end of the
+task along with the contents of its temporary storage space.</p>
+<p>For example if a job creates files on the local filesystem those would
+be lost when the worker is destroyed unless the they are first uploaded
+over the network to a file server, or to Amazon S3, etc.</p>
+<p>Any console output (e.g., print statements) from a job is automatically
+logged by Cloudtask.</p>
+</div>
+<div class="section" id="what-happens-if-a-job-fails">
+<h1>What happens if a job fails?</h1>
+<p>A job is considered to have failed if the job command returns a non-zero
+exitcode. Failed jobs are not retried. They are simply logged and the
+total number of job failures reported at the end of the session. The
+worker then continues executing the next job.</p>
+</div>
+<div class="section" id="are-jobs-divided-equally-amongst-workers">
+<h1>Are jobs divided equally amongst workers?</h1>
+<p>Not necessarily. Workers pull job commands from a queue of jobs on a
+first come first served basis. A worker will grab the next job from the
+queue as soon as it is finished with the previous job. A fast worker or
+a worker that has received shorter jobs may execute more jobs than a
+slow worker or a worker that has received longer jobs.</p>
+</div>
+<div class="section" id="how-does-cloudtask-authenticate-to-workers">
+<h1>How does cloudtask authenticate to workers?</h1>
+<p>Cloudtask logs into remote servers over SSH. It assumes it can do this
+without a password using SSH key authentication (e.g., your SSH key has
+been added to the worker's authorized keys). Password authentication is
+not supported.</p>
+<p>In the User Profile section the Hub allows you to configure one or more
+SSH public keys which will be added to the authorized keys of any cloud
+server launched.</p>
+</div>
+<div class="section" id="so-i-need-to-put-my-private-ssh-key-on-any-remote-server-i-run-cloudtask-on">
+<h1>So I need to put my private SSH key on any remote server I run cloudtask on?</h1>
+<p>That's one way to do it. Another, more secure alternative would be to
+use SSH agent forwarding to log into the remote server:</p>
+<pre class="literal-block">
+ssh -A remote-server
+</pre>
+<p>Forwarding the local SSH agent will let remote-server authentiate with
+your SSH keys without them ever leaving the security of your personal
+computer.</p>
+</div>
+<div class="section" id="what-if-a-worker-fails">
+<h1>What if a worker fails?</h1>
+<p>Cloudtask does not depend on the reliability of any single worker. If a
+worker fails while it is running a job, the job will be re-routed to one
+of the remaining workers.</p>
+<p>A worker is considered to have failed when cloudtask detects that it is
+no longer capable of executing commands over SSH (I.e., cloudtask pings
+workers periodically).</p>
+<p>It doesn't matter if this is because of a network routing problem which
+makes the worker unreachable, a software problem (e.g., kernel panic) or
+a critical performance issue such as the worker running out of memory
+and thrashing so badly into swap that it can't even accept commands over
+SSH.</p>
+<p>As usual Cloudtask takes responsibility for the destruction of workers
+it launches. A worker that has failed will be destroyed immediately.</p>
+</div>
+<div class="section" id="do-i-have-to-use-the-hub-to-launch-workers">
+<h1>Do I have to use the Hub to launch workers?</h1>
+<p>No that's just the easiest way to do it. Cloudtask can accept an
+arbitrary list of worker IP addresses via the --workers option.</p>
+</div>
+<div class="section" id="can-i-mix-pre-launched-workers-with-automatically-launched-workers">
+<h1>Can I mix pre-launched workers with automatically launched workers?</h1>
+<p>Yes. If the --split is greater than the number of pre-launched workers
+you provide via the --workers option then Cloudtask will launch
+additional workers to satisfy the configured split.</p>
+<p>For example, if you provide a list of 5 pre-launched worker IP addresses
+and specify a task split of 15 then Cloudtask will launch an additional
+10 workers automatically.</p>
+</div>
+<div class="section" id="when-are-workers-automatically-destroyed">
+<h1>When are workers automatically destroyed?</h1>
+<p>To minimize cloud server usage fees, Cloudtask destroys workers it
+launches as soon as it runs out of work for them to do.</p>
+<p>But Cloudtask only takes responsibility for the destruction of workers
+it launches automatically. You can also launch workers by hand using the
+cloudtask-launch-workers command and pass them to cloudtask using the
+--workers option. In that case you are responsibile for worker
+destruction (e.g., using the cloudtask-destroy-workers command).</p>
+</div>
+<div class="section" id="how-do-i-abort-a-task">
+<h1>How do I abort a task?</h1>
+<p>You can abort a task safely at any time by either:</p>
+<ol class="arabic simple">
+<li>Pressing CTRL-C on the console in which cloudtask is executing.</li>
+<li>Use kill to send the TERM signal to cloudtask session pid.</li>
+</ol>
+</div>
+<div class="section" id="what-happens-when-i-abort-a-task">
+<h1>What happens when I abort a task?</h1>
+<p>The execution of all currently running jobs is immediately aborted. Any
+worker instance that was automatically launched by cloudtask is
+destroyed as soon as possible.</p>
+<p>To allow an aborted session to be later resumed, the current state of
+the task is saved in the task session. The state describes which jobs
+have finished executing and which jobs are still in the pending state.</p>
+<p>When the task is resumed any aborted jobs will be re-executed along with
+the other pending jobs.</p>
+<p>Aborting a task is not immediate because it can take anywhere from a few
+seconds to to a few minutes to safely shut down a task. For example EC2
+instances in the pending state can not be destroyed so cloudtask has to
+wait for them to reach the running state first.</p>
+</div>
+</div>
+</body>
+</html>

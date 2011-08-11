@@ -1,0 +1,211 @@
+.\" Man page generated from reStructeredText.
+.
+.TH CLOUDTASK FAQ 7 "2011-08-11" "" "misc"
+.SH NAME
+Cloudtask FAQ \- Frequently Asked Questions
+.
+.nr rst2man-indent-level 0
+.
+.de1 rstReportMargin
+\\$1 \\n[an-margin]
+level \\n[rst2man-indent-level]
+level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
+-
+\\n[rst2man-indent0]
+\\n[rst2man-indent1]
+\\n[rst2man-indent2]
+..
+.de1 INDENT
+.\" .rstReportMargin pre:
+. RS \\$1
+. nr rst2man-indent\\n[rst2man-indent-level] \\n[an-margin]
+. nr rst2man-indent-level +1
+.\" .rstReportMargin post:
+..
+.de UNINDENT
+. RE
+.\" indent \\n[an-margin]
+.\" old: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.nr rst2man-indent-level -1
+.\" new: \\n[rst2man-indent\\n[rst2man-indent-level]]
+.in \\n[rst2man-indent\\n[rst2man-indent-level]]u
+..
+.SH WHAT IS A TASK JOB?
+.sp
+A task is a sequence of jobs. Each job is essentially just a shell
+command which cloudtask creates by appending the task command to the job
+input arguments. For example, consider the following cloudtask:
+.sp
+.nf
+.ft C
+seq 3 | cloudtask echo
+.ft P
+.fi
+.sp
+\fIseq 3\fP prints out a sequence of numbers from 1 to 3, each on a separate
+line which cloudtask appends to the \fIecho\fP command to create three
+commands:
+.sp
+.nf
+.ft C
+echo 1
+echo 2
+echo 3
+.ft P
+.fi
+.sp
+Each job command should be independent, which means it shouldn\(aqt rely on
+any other job command being run before or after it on a particular
+worker. The execution order and distribution of job commands is up to
+cloudtask. If a task is split up amongst multiple workers (e.g.,
+\-\-split=3) each job command is likely be executed on a different server.
+.sp
+Job commands may not require any user interaction. Cloudtask can not
+interact with job commands so any attempt at user interaction (e.g., a
+confirmation dialog) will hang the job until the configured job
+\-\-timeout elapses (1 hour by default).
+.SH HOW DO I PREPARE A WORKER FOR A JOB?
+.sp
+On a fresh TurnKey Core deployment install and test all the software
+(e.g., packages, custom scripts, etc.) that your job command depend on.
+This is your master worker.
+.sp
+Backup the master using TKLBAM, and pass its backup id to cloudtask so
+that it can restore this backup on any worker it launches automatically.
+.sp
+You can substitute or supplement a TKLBAM restore with the \-\-pre command
+(e.g., to install a package) and/or apply an \-\-overlay to the worker\(aqs
+filesystem.
+.SH HOW DO I PROVIDE JOB COMMANDS WITH REQUIRED INPUT DATA?
+.sp
+Small amounts of input data may be stored in the TKLBAM backup or
+transfered over to the worker in the overlay.
+.sp
+For more substantial amounts of input data, it is recommended to pull in
+data over the network (e.g., from a file server or Amazon S3).
+.SH WHERE DO I STORE THE USEFUL END-PRODUCTS OF A JOB COMMAND?
+.sp
+Jobs should squirrel away useful end\-products such as files to an
+external storage resource on the network.
+.sp
+Any hard disk storage space on the worker should be considered temporary
+as any automatically launched worker will be destroyed at the end of the
+task along with the contents of its temporary storage space.
+.sp
+For example if a job creates files on the local filesystem those would
+be lost when the worker is destroyed unless the they are first uploaded
+over the network to a file server, or to Amazon S3, etc.
+.sp
+Any console output (e.g., print statements) from a job is automatically
+logged by Cloudtask.
+.SH WHAT HAPPENS IF A JOB FAILS?
+.sp
+A job is considered to have failed if the job command returns a non\-zero
+exitcode. Failed jobs are not retried. They are simply logged and the
+total number of job failures reported at the end of the session. The
+worker then continues executing the next job.
+.SH ARE JOBS DIVIDED EQUALLY AMONGST WORKERS?
+.sp
+Not necessarily. Workers pull job commands from a queue of jobs on a
+first come first served basis. A worker will grab the next job from the
+queue as soon as it is finished with the previous job. A fast worker or
+a worker that has received shorter jobs may execute more jobs than a
+slow worker or a worker that has received longer jobs.
+.SH HOW DOES CLOUDTASK AUTHENTICATE TO WORKERS?
+.sp
+Cloudtask logs into remote servers over SSH. It assumes it can do this
+without a password using SSH key authentication (e.g., your SSH key has
+been added to the worker\(aqs authorized keys). Password authentication is
+not supported.
+.sp
+In the User Profile section the Hub allows you to configure one or more
+SSH public keys which will be added to the authorized keys of any cloud
+server launched.
+.SH SO I NEED TO PUT MY PRIVATE SSH KEY ON ANY REMOTE SERVER I RUN CLOUDTASK ON?
+.sp
+That\(aqs one way to do it. Another, more secure alternative would be to
+use SSH agent forwarding to log into the remote server:
+.sp
+.nf
+.ft C
+ssh \-A remote\-server
+.ft P
+.fi
+.sp
+Forwarding the local SSH agent will let remote\-server authentiate with
+your SSH keys without them ever leaving the security of your personal
+computer.
+.SH WHAT IF A WORKER FAILS?
+.sp
+Cloudtask does not depend on the reliability of any single worker. If a
+worker fails while it is running a job, the job will be re\-routed to one
+of the remaining workers.
+.sp
+A worker is considered to have failed when cloudtask detects that it is
+no longer capable of executing commands over SSH (I.e., cloudtask pings
+workers periodically).
+.sp
+It doesn\(aqt matter if this is because of a network routing problem which
+makes the worker unreachable, a software problem (e.g., kernel panic) or
+a critical performance issue such as the worker running out of memory
+and thrashing so badly into swap that it can\(aqt even accept commands over
+SSH.
+.sp
+As usual Cloudtask takes responsibility for the destruction of workers
+it launches. A worker that has failed will be destroyed immediately.
+.SH DO I HAVE TO USE THE HUB TO LAUNCH WORKERS?
+.sp
+No that\(aqs just the easiest way to do it. Cloudtask can accept an
+arbitrary list of worker IP addresses via the \-\-workers option.
+.SH CAN I MIX PRE-LAUNCHED WORKERS WITH AUTOMATICALLY LAUNCHED WORKERS?
+.sp
+Yes. If the \-\-split is greater than the number of pre\-launched workers
+you provide via the \-\-workers option then Cloudtask will launch
+additional workers to satisfy the configured split.
+.sp
+For example, if you provide a list of 5 pre\-launched worker IP addresses
+and specify a task split of 15 then Cloudtask will launch an additional
+10 workers automatically.
+.SH WHEN ARE WORKERS AUTOMATICALLY DESTROYED?
+.sp
+To minimize cloud server usage fees, Cloudtask destroys workers it
+launches as soon as it runs out of work for them to do.
+.sp
+But Cloudtask only takes responsibility for the destruction of workers
+it launches automatically. You can also launch workers by hand using the
+cloudtask\-launch\-workers command and pass them to cloudtask using the
+\-\-workers option. In that case you are responsibile for worker
+destruction (e.g., using the cloudtask\-destroy\-workers command).
+.SH HOW DO I ABORT A TASK?
+.sp
+You can abort a task safely at any time by either:
+.INDENT 0.0
+.IP 1. 3
+.
+Pressing CTRL\-C on the console in which cloudtask is executing.
+.IP 2. 3
+.
+Use kill to send the TERM signal to cloudtask session pid.
+.UNINDENT
+.SH WHAT HAPPENS WHEN I ABORT A TASK?
+.sp
+The execution of all currently running jobs is immediately aborted. Any
+worker instance that was automatically launched by cloudtask is
+destroyed as soon as possible.
+.sp
+To allow an aborted session to be later resumed, the current state of
+the task is saved in the task session. The state describes which jobs
+have finished executing and which jobs are still in the pending state.
+.sp
+When the task is resumed any aborted jobs will be re\-executed along with
+the other pending jobs.
+.sp
+Aborting a task is not immediate because it can take anywhere from a few
+seconds to to a few minutes to safely shut down a task. For example EC2
+instances in the pending state can not be destroyed so cloudtask has to
+wait for them to reach the running state first.
+.SH AUTHOR
+Liraz Siri <liraz@turnkeylinux.org>
+.\" Generated by docutils manpage writer.
+.\" 
+.

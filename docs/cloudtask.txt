@@ -522,4 +522,4 @@ When the user executes a task, the following steps are performed:
 SEE ALSO
 ========
 
-``cloudtask-launch-workers`` (8), ``cloudtask-destroy-workers`` (8)
+``cloudtask-faq`` (7), ``cloudtask-launch-workers`` (8), ``cloudtask-destroy-workers`` (8),
