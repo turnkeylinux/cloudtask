@@ -37,6 +37,10 @@ cat jobs | cloudtask [ \-opts ] [ command ]
 cloudtask [ \-opts ] \-\-resume=SESSION_ID
 .SH DESCRIPTION
 .sp
+Remotely execute in parallel a batch of commands over SSH while either
+automatically allocating cloud servers as required, or using a
+pre\-configured list of servers.
+.sp
 Cloudtask reads job inputs from stdin, each job input on a separate line
 containing one or more command line arguments. For each job, the job
 arguments are appended to the configured command and executed via SSH on
