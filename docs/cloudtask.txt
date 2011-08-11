@@ -158,6 +158,9 @@ OPTIONS
 --sessions=PATH         
   Path where sessions are stored (default: $HOME/.cloudtask)
 
+--timeout=SECONDS      
+  How many seconds to wait before giving up (default: 3600)
+
 --user=USERNAME         
   Username to execute commands as (default: root)
 
@@ -169,9 +172,6 @@ OPTIONS
 
 --overlay=PATH      
   Path to worker filesystem overlay
-
---timeout=SECONDS      
-  How many seconds to wait before giving up
 
 --split=NUM        
   Number of workers to execute jobs in parallel

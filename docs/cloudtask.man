@@ -193,6 +193,10 @@ Instance launch type <s3|ebs> (default: s3)
 .
 Path where sessions are stored (default: $HOME/.cloudtask)
 .TP
+.BI \-\-timeout\fB= SECONDS
+.
+How many seconds to wait before giving up (default: 3600)
+.TP
 .BI \-\-user\fB= USERNAME
 .
 Username to execute commands as (default: root)
@@ -208,10 +212,6 @@ Worker cleanup command
 .BI \-\-overlay\fB= PATH
 .
 Path to worker filesystem overlay
-.TP
-.BI \-\-timeout\fB= SECONDS
-.
-How many seconds to wait before giving up
 .TP
 .BI \-\-split\fB= NUM
 .
