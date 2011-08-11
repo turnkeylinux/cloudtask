@@ -18,7 +18,7 @@ class TaskConf:
     post = None
     overlay = None
 
-    timeout = None
+    timeout = 3600
 
     split = None
     workers = []

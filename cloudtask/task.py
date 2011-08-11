@@ -29,11 +29,11 @@ Options:
 
     --sessions=      Path where sessions are stored (default: $HOME/.cloudtask)
 
+    --timeout=       How many seconds to wait before giving up (default: 3600)
     --user=          Username to execute commands as (default: root)
     --pre=           Worker setup command
     --post=          Worker cleanup command
     --overlay=       Path to worker filesystem overlay
-    --timeout=       How many seconds to wait before giving up
     --split=         Number of workers to execute jobs in parallel
 
     --workers=       List of pre-launched workers to use
