@@ -66,11 +66,11 @@ def main():
         if opt == '--hub-apikey':
             hub_apikey = val
 
-    if not hub_apikey:
-        fatal("missing required HUB_APIKEY")
-
     if not len(args) == 1:
         usage()
+
+    if not hub_apikey:
+        fatal("missing required HUB_APIKEY")
 
     input = args[0]
     if input == '-':

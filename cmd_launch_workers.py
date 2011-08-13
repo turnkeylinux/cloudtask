@@ -105,11 +105,11 @@ def main():
                 kwargs[key] = val
                 break
 
-    if not hub_apikey:
-        fatal("missing required HUB_APIKEY")
-
     if len(args) < 2:
         usage()
+
+    if not hub_apikey:
+        fatal("missing required HUB_APIKEY")
 
     howmany, output = args
 
