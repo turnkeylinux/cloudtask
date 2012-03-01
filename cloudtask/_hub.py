@@ -18,7 +18,8 @@ class Hub(Spawner):
         Invoke callback every frequently. If callback returns False, we terminate launching.
         """
 
-        kwargs.update(sec_updates='SKIP')
+        if 'sec_updates' not in kwargs:
+            kwargs.update(sec_updates='SKIP')
 
         name = kwargs.pop('backup_id', None)
         if not name:
