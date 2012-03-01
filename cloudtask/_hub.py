@@ -39,7 +39,7 @@ class Hub:
         self.wait_retry = wait_retry
         self.retries = retries
 
-    def retry(self, callable, *args, **kwargs):
+    def _retry(self, callable, *args, **kwargs):
         for i in range(self.retries + 1):
             try:
                 return callable(*args, **kwargs)
@@ -60,7 +60,7 @@ class Hub:
         Invoke callback every frequently. If callback returns False, we terminate launching.
         """
 
-        retry = self.retry
+        retry = self._retry
         hub = _Hub(self.apikey)
 
         pending_ids = set()
@@ -128,7 +128,7 @@ class Hub:
             return
 
         hub = _Hub(self.apikey)
-        retry = self.retry
+        retry = self._retry
 
         destroyable = [ server
                         for server in retry(hub.servers.get, refresh_cache=True)
