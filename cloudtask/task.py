@@ -23,6 +23,8 @@ Options:
 
     --hub-apikey=    Hub API KEY (required if launching workers)
     --backup-id=     TurnKey Backup ID to restore on launch
+    --ami-id=        Force launch a specific AMI ID (default is the latest Core)
+
     --ec2-region=    Region for instance launch (default: us-east-1)
     --ec2-size=      Instance launch size (default: m1.small)
     --ec2-type=      Instance launch type <s3|ebs> (default: s3)
@@ -253,7 +255,7 @@ class Task:
                 if isfile(taskconf.workers):
                     taskconf.workers = file(taskconf.workers).read().splitlines()
                 else:
-                    taskconf.workers = [ worker.strip() for worker in taskconf.workers.split(',') ]
+                    taskconf.workers = [ worker.strip() for worker in re.split('\s+', taskconf.workers) ]
             else:
                 taskconf.workers = list(taskconf.workers)
 

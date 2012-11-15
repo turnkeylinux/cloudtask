@@ -17,6 +17,8 @@ import shlex
 from email.Message import Message
 from command import Command
 
+import StringIO
+
 class Error(Exception):
     pass
 
@@ -92,16 +94,45 @@ class MailHandler:
         self.recipients = args[1:]
         self.sendmail = self.Sendmail()
 
+    @staticmethod
+    def fmt_taskconf(taskconf):
+        sio = StringIO.StringIO()
+
+        table = []
+        for attr in ('split', 'command',
+                     'ec2-region', 'ec2-size', 'ec2-type',
+                     'user', 'backup-id', 'workers',
+                     'overlay', 'post', 'pre', 'timeout', 'report'):
+
+            val = taskconf[attr.replace('-', '_')]
+            if isinstance(val, list):
+                val = " ".join(val)
+            if not val:
+                val = "-"
+            table.append((attr, val))
+
+        print >> sio, "  Parameter       Value"
+        print >> sio, "  ---------       -----"
+        print >> sio
+        for row in table:
+            print >> sio, "  %-15s %s" % (row[0], row[1])
+
+        print >> sio
+
+        return sio.getvalue()
+
     def __call__(self, session):
         mlog = file(session.paths.log).read()
         taskconf = session.taskconf
+
+        body = self.fmt_taskconf(taskconf) + mlog
 
         for recipient in self.recipients:
 
             subject = "[Cloudtask] " + taskconf.command
 
             self.sendmail(self.sender, recipient, 
-                          subject, mlog)
+                          subject, body)
 
 
 class ShellHandler:
