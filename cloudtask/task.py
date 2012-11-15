@@ -255,7 +255,7 @@ class Task:
                 if isfile(taskconf.workers):
                     taskconf.workers = file(taskconf.workers).read().splitlines()
                 else:
-                    taskconf.workers = [ worker.strip() for worker in taskconf.workers.split(',') ]
+                    taskconf.workers = [ worker.strip() for worker in re.split('\s+', taskconf.workers) ]
             else:
                 taskconf.workers = list(taskconf.workers)
 
