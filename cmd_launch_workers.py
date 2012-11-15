@@ -23,6 +23,7 @@ Options:
                        Environment: HUB_APIKEY
 
     --backup-id        TurnKey Backup ID to restore
+    --ami-id           Force launch a specific AMI ID (default is the latest Core)
 
     --region           Region for instance launch (default: us-east-1)
                        Regions:
@@ -82,6 +83,7 @@ def main():
         'type': "s3",
         'label': "Cloudtask worker",
         'backup_id': None,
+        'ami_id': None,
     }
 
     hub_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_HUB_APIKEY'))
