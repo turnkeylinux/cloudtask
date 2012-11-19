@@ -101,7 +101,7 @@ class MailHandler:
         table = []
         for attr in ('split', 'command',
                      'ec2-region', 'ec2-size', 'ec2-type',
-                     'user', 'backup-id', 'workers',
+                     'user', 'backup-id', 'ami-id', 'workers',
                      'overlay', 'post', 'pre', 'timeout', 'report'):
 
             val = taskconf[attr.replace('-', '_')]
