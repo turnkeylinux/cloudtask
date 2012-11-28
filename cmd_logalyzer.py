@@ -25,18 +25,7 @@ import getopt
 import re
 
 from StringIO import StringIO
-
-def usage(e=None):
-    if e:
-        print >> sys.stderr, "error: " + str(e)
-
-    print >> sys.stderr, "Usage: %s [ -opts ] path/to/session" % sys.argv[0]
-    print >> sys.stderr, __doc__.strip()
-    sys.exit(1)
-
-def fatal(e):
-    print >> sys.stderr, "error: " + str(e)
-    sys.exit(1)
+from datetime import datetime
 
 def fmt_elapsed(seconds):
     hours = seconds / 3600
@@ -44,6 +33,105 @@ def fmt_elapsed(seconds):
     seconds = (seconds % 3600) % 60
 
     return "%02d:%02d:%02d" % (hours, minutes, seconds)
+
+class WorkersLog:
+    class LogEntry:
+        TIMESTAMP_FMT = "%Y-%m-%d %H:%M:%S"
+        def __init__(self, timestamp, title):
+            self.timestamp = datetime.strptime(timestamp, self.TIMESTAMP_FMT)
+            self.title = title
+            self.body = None
+
+        def __repr__(self):
+            return "LogEntry%s" % `datetime.strftime(self.timestamp, self.TIMESTAMP_FMT), self.title`
+
+    @classmethod
+    def parse_worker_log(cls, fpath):
+        entries = []
+        body = ""
+        for line in file(fpath).readlines():
+            m = re.match(r'^# (\d{4}-\d+-\d+ \d\d:\d\d:\d\d) \[.*?\] (.*)', line)
+            if not m:
+                body += line
+                continue
+            else:
+                body = body.strip()
+                if entries and body:
+                    entries[-1].body = body
+                body = ""
+                timestamp, title = m.groups()
+                entries.append(cls.LogEntry(timestamp, title))
+
+        return entries
+
+    class Job:
+        def __init__(self, worker_id, name, result, timestamp, elapsed, output):
+            self.worker_id = worker_id
+            self.name = name
+            self.result = result
+            self.timestamp = timestamp
+            self.elapsed = elapsed
+            self.output = output
+
+        def __repr__(self):
+            return "Job%s" % `self.worker_id, self.name, self.result, self.elapsed`
+
+    @classmethod
+    def get_jobs(cls, log_entries, worker_id, command):
+        pat = re.compile(r'^(.*?) # %s (.*)' % command)
+
+        jobs = []
+        for i, entry in enumerate(log_entries):
+            m = pat.match(entry.title)
+            if m:
+                result, name = m.groups()
+                started = log_entries[i-1]
+                elapsed = (entry.timestamp - started.timestamp).seconds
+                jobs.append(cls.Job(worker_id, name, result, started.timestamp, elapsed, started.body))
+
+        return jobs
+
+    def __init__(self, dpath, command):
+        jobs = {}
+        for fname in os.listdir(dpath):
+            worker_id = int(fname)
+            fpath = join(dpath, fname)
+            log_entries = self.parse_worker_log(fpath)
+            worker_jobs = self.get_jobs(log_entries, worker_id, command)
+
+            for job in worker_jobs:
+                name = job.name
+                if name in jobs:
+                    conflicting_job = jobs[name]
+                    if job.timestamp > conflicting_job.timestamp:
+                        jobs[name] = job
+                else:
+                    jobs[name] = job
+
+        self.jobs = jobs.values()
+
+def fmt_table(rows, title=[], groupby=None):
+    col_widths = []
+    for col_index in range(len(rows[0])):
+        col = [ str(row[col_index]) for row in rows ]
+        col_width = max(map(len, col)) + 5
+        col_widths.append(col_width)
+
+    row_fmt = " ".join([ '%%-%ds' % width for width in col_widths ])
+    sio = StringIO()
+    if title:
+        title = title[:]
+        title[0] = "# " + title[0]
+        print >> sio, row_fmt % tuple(title)
+        print >> sio
+
+    for i, row in enumerate(rows):
+        if groupby and i and groupby(rows[i]) != groupby(rows[i-1]):
+            print >> sio
+
+        print >> sio, row_fmt % row
+
+    return sio.getvalue()
 
 def logalyzer(session_path):
     session_paths = Session.Paths(session_path)
@@ -61,11 +149,18 @@ def logalyzer(session_path):
         summary[attrname] = vals[i]
 
     s = summary
-    header =  "session %d: %s elapsed, %d jobs - %d failed, %d succeeded" % (s['id'],
-                                                                            fmt_elapsed(s['elapsed']),
-                                                                            s['jobs'],
-                                                                            s['failed'],
-                                                                            s['completed'])
+
+    sio = StringIO()
+
+    def header(level, s):
+        c = "=-"[level]
+        return s + "\n" + c * len(s) + "\n"
+
+    print >> sio, header(0, "session %d: %s elapsed, %d jobs - %d failed, %d completed" % 
+                            (s['id'], fmt_elapsed(s['elapsed']), s['jobs'], s['failed'], s['completed']))
+
+    print >> sio, "Configuration:"
+    print >> sio
 
     c = conf
     workers = "%d x (%s)" % (c['split'],
@@ -73,24 +168,54 @@ def logalyzer(session_path):
                                        for attr in ('ec2_region', 'ec2_size', 'ec2_type', 'ami_id') 
                                        if c[attr] ]))
 
-
     fields = conf
     fields['workers'] = workers
-
-    sio = StringIO()
-
-    print >> sio, header
-    print >> sio, "=" * len(header)
-    print >> sio
-    print >> sio, "Configuration:"
-    print >> sio
 
     for field in ('command', 'workers', 'backup_id', 'overlay', 'timeout', 'report'):
         print >> sio, "    %-16s %s" % (field.replace('_', '-'), fields[field])
 
     print >> sio
 
+    wl = WorkersLog(session_paths.workers, conf['command'])
+    failures = [ job for job in wl.jobs if job.result != 'exit 0' ]
+    failures.sort(lambda a,b: cmp(a.worker_id, b.worker_id))
+
+    if failures:
+        print >> sio, header(0, "Failed %d jobs" % len(failures))
+        print >> sio, header(1, "Summary")
+
+        rows = [ (job.name, fmt_elapsed(job.elapsed), job.result, job.worker_id)
+                  for job in failures ]
+
+        fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "RESULT", "WORKER"], 
+                                groupby=lambda a:a[3])
+        print >> sio, fmted_table
+        fmted_rows = [ line for line in fmted_table.splitlines()[2:] if line ]
+
+        print >> sio, header(1, "Last output")
+
+        def indent(depth, buf):
+            return "\n".join([ " " * depth + line for line in buf.splitlines() ])
+
+        for i, fmted_row in enumerate(fmted_rows):
+            print >> sio, fmted_row
+            print >> sio
+            print >> sio, indent(4, "\n".join(failures[i].output.splitlines()[-5:]))
+            print >> sio
+
     return sio.getvalue()
+
+def usage(e=None):
+    if e:
+        print >> sys.stderr, "error: " + str(e)
+
+    print >> sys.stderr, "Usage: %s [ -opts ] path/to/session" % sys.argv[0]
+    print >> sys.stderr, __doc__.strip()
+    sys.exit(1)
+
+def fatal(e):
+    print >> sys.stderr, "error: " + str(e)
+    sys.exit(1)
 
 def main():
 
