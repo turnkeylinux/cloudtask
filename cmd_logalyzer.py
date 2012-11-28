@@ -11,7 +11,7 @@
 # 
 
 """
-Analyze log output
+Analyze session logs
 
 """
 
@@ -166,7 +166,7 @@ def logalyzer(session_path):
     workers = "%d x (%s)" % (c['split'],
                              " : ".join([ c[attr] 
                                        for attr in ('ec2_region', 'ec2_size', 'ec2_type', 'ami_id') 
-                                       if c[attr] ]))
+                                       if attr in c and c[attr] ]))
 
     fields = conf
     fields['workers'] = workers
