@@ -163,7 +163,7 @@ def logalyzer(session_path):
     print >> sio
 
     c = conf
-    workers = "%d x (%s)" % (c['split'],
+    workers = "%d x (%s)" % (c['split'] if c['split'] else 1,
                              " : ".join([ c[attr] 
                                        for attr in ('ec2_region', 'ec2_size', 'ec2_type', 'ami_id') 
                                        if attr in c and c[attr] ]))
@@ -171,8 +171,9 @@ def logalyzer(session_path):
     fields = conf
     fields['workers'] = workers
 
-    for field in ('command', 'workers', 'backup_id', 'overlay', 'timeout', 'report'):
-        print >> sio, "    %-16s %s" % (field.replace('_', '-'), fields[field])
+    for field in ('command', 'workers', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report'):
+        if field in fields and fields[field]:
+            print >> sio, "    %-16s %s" % (field.replace('_', '-'), fields[field])
 
     print >> sio
 
@@ -184,8 +185,11 @@ def logalyzer(session_path):
     failures = [ job for job in jobs if job.result != 'exit 0' ]
 
     if failures:
+        single_failure = (len(failures) == 1)
+
         print >> sio, header(0, "Failed %d jobs" % len(failures))
-        print >> sio, header(1, "Summary")
+        if not single_failure:
+            print >> sio, header(1, "Summary")
 
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.result, job.worker_id)
                   for job in failures ]
@@ -195,14 +199,16 @@ def logalyzer(session_path):
         print >> sio, fmted_table
         fmted_rows = [ line for line in fmted_table.splitlines()[2:] if line ]
 
-        print >> sio, header(1, "Last output")
+        if not single_failure:
+            print >> sio, header(1, "Last output")
 
         def indent(depth, buf):
             return "\n".join([ " " * depth + line for line in buf.splitlines() ])
 
         for i, fmted_row in enumerate(fmted_rows):
-            print >> sio, fmted_row
-            print >> sio
+            if not single_failure:
+                print >> sio, fmted_row
+                print >> sio
             print >> sio, indent(4, "\n".join(failures[i].output.splitlines()[-5:]))
             print >> sio
 
