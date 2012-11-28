@@ -177,8 +177,11 @@ def logalyzer(session_path):
     print >> sio
 
     wl = WorkersLog(session_paths.workers, conf['command'])
-    failures = [ job for job in wl.jobs if job.result != 'exit 0' ]
-    failures.sort(lambda a,b: cmp(a.worker_id, b.worker_id))
+
+    jobs = wl.jobs[:]
+    jobs.sort(lambda a,b: cmp((a.worker_id, b.elapsed), (b.worker_id, a.elapsed)))
+
+    failures = [ job for job in jobs if job.result != 'exit 0' ]
 
     if failures:
         print >> sio, header(0, "Failed %d jobs" % len(failures))
@@ -202,6 +205,15 @@ def logalyzer(session_path):
             print >> sio
             print >> sio, indent(4, "\n".join(failures[i].output.splitlines()[-5:]))
             print >> sio
+
+    completed = [ job for job in jobs if job.result == 'exit 0' ]
+    print >> sio, header(0, "Completed %d jobs" % len(completed))
+
+    rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
+              for job in completed ]
+    fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 
+                            groupby=lambda a:a[2])
+    print >> sio, fmted_table
 
     return sio.getvalue()
 
