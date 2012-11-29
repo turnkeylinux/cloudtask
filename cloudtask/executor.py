@@ -187,6 +187,7 @@ class CloudWorker:
                 read_timeout.reset()
 
             if ssh_command.running and timeout.expired():
+                print >> self.wlog
                 ssh_command.terminate()
                 self.status("timeout %d # %s" % (timeout.seconds, command))
                 return
