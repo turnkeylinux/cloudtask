@@ -13,7 +13,7 @@ import os
 from os.path import *
 import sys
 
-from paths import Paths
+import paths
 import errno
 import time
 
@@ -57,7 +57,7 @@ class Session(object):
     class Error(Exception):
         pass
 
-    class Paths(Paths):
+    class Paths(paths.Paths):
         files = ['conf', 'workers', 'log', 'jobs']
 
     class Jobs:
@@ -161,7 +161,7 @@ class Session(object):
             makedirs(path)
         else:
             if not isdir(path):
-                raise Error("no such session '%s'" % id)
+                raise self.Error("no such session '%s'" % id)
 
         self.paths = Session.Paths(path)
         self.jobs = self.Jobs(self.paths.jobs)
