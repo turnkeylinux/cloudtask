@@ -161,15 +161,9 @@ class CloudWorker:
         (self.address, self.pid) = state
 
     def status(self, msg):
-        wlog = self.wlog
-        mlog = self.mlog
-
-        if wlog:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            print >> wlog.status, "# %s [%s] %s" % (timestamp, self.address, msg)
-
-        if mlog and mlog != wlog:
-            mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        print >> self.wlog.status, "# %s [%s] %s" % (timestamp, self.address, msg)
+        print >> self.mlog, "%s (%d): %s" % (self.address, os.getpid(), msg)
 
     def __call__(self, command):
         timeout = self.timeout
@@ -182,7 +176,7 @@ class CloudWorker:
         timeout = Timeout(timeout)
         read_timeout = Timeout(self.ssh.TIMEOUT)
         def handler(ssh_command, buf):
-            if buf and self.wlog:
+            if buf:
                 self.wlog.write(buf)
                 read_timeout.reset()
 
@@ -201,6 +195,7 @@ class CloudWorker:
                         pass
                 else:
                     ssh_command.terminate()
+                    print >> self.wlog
                     self.status("worker died (%s) # %s" % (e, command))
                     raise SSH.TimeoutError
 
@@ -215,6 +210,7 @@ class CloudWorker:
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except self.Terminated:
             ssh_command.terminate()
+            print >> self.wlog
             self.status("terminated # %s" % command)
             raise
 
@@ -223,10 +219,8 @@ class CloudWorker:
                 self.status("worker unreachable # %s" % command)
                 raise SSH.Error(ssh_command.output)
 
-            self.status("exit %d # %s" % (ssh_command.exitcode, command))
-
-        if self.wlog:
             print >> self.wlog
+            self.status("exit %d # %s" % (ssh_command.exitcode, command))
 
         return (str(command), ssh_command.exitcode)
 
