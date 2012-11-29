@@ -34,6 +34,9 @@ def fmt_elapsed(seconds):
 
     return "%02d:%02d:%02d" % (hours, minutes, seconds)
 
+class Error(Exception):
+    pass
+
 class WorkersLog:
     class LogEntry:
         TIMESTAMP_FMT = "%Y-%m-%d %H:%M:%S"
@@ -141,7 +144,8 @@ def logalyzer(session_path):
 
     m = re.search(r'^session (\d+): (\d+) jobs in (\d+) seconds \((\d+) succeeded, (\d+) failed\)', log, 
                   re.MULTILINE)
-    assert m
+    if not m:
+        raise Error("couldn't find session summary")
 
     summary = {}
     vals = map(int, m.groups())
@@ -213,13 +217,14 @@ def logalyzer(session_path):
             print >> sio
 
     completed = [ job for job in jobs if job.result == 'exit 0' ]
-    print >> sio, header(0, "Completed %d jobs" % len(completed))
+    if completed:
+        print >> sio, header(0, "Completed %d jobs" % len(completed))
 
-    rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
-              for job in completed ]
-    fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 
-                            groupby=lambda a:a[2])
-    print >> sio, fmted_table
+        rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
+                  for job in completed ]
+        fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 
+                                groupby=lambda a: a[2])
+        print >> sio, fmted_table
 
     return sio.getvalue()
 
