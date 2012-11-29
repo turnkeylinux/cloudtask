@@ -43,6 +43,8 @@ class Timeout:
         self.started = time.time()
 
 class CloudWorker:
+    SSH_PING_RETRIES = 3
+
     Terminated = Parallelize.Worker.Terminated
 
     class Error(Exception):
@@ -190,9 +192,13 @@ class CloudWorker:
                 return
 
             if read_timeout.expired():
-                try:
-                    self.ssh.ping()
-                except self.ssh.Error, e:
+                for retry in range(self.SSH_PING_RETRIES):
+                    try:
+                        self.ssh.ping()
+                        break
+                    except self.ssh.Error, e:
+                        pass
+                else:
                     ssh_command.terminate()
                     self.status("worker died (%s) # %s" % (e, command))
                     raise SSH.TimeoutError
