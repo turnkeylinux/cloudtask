@@ -166,7 +166,7 @@ class CloudWorker:
 
         if wlog:
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            print >> wlog, "# %s [%s] %s" % (timestamp, self.address, msg)
+            print >> wlog.status, "# %s [%s] %s" % (timestamp, self.address, msg)
 
         if mlog and mlog != wlog:
             mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")

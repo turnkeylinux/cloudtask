@@ -99,15 +99,27 @@ class Session(object):
                 print >> fh, "%s\t%s" % (state, job)
             fh.close()
 
-    class WorkerLog:
-        def __init__(self, path):
+    class WorkerLog(object):
+        def fh(self):
+            if not self._fh:
+                self._fh = file(join(self.path, str(os.getpid())), "a", 1)
+
+            return self._fh
+        status = fh = property(fh)
+
+
+        def __init__(self, path, tee=False):
+            self._fh = None
             self.path = path
-            self.fh = None
+            self.tee = tee
+
+        def write(self, buf):
+            self.fh.write(buf)
+            if self.tee:
+                sys.stdout.write(buf)
+                sys.stdout.flush()
 
         def __getattr__(self, attr):
-            if not self.fh:
-                self.fh = file(join(self.path, str(os.getpid())), "a", 1)
-
             return getattr(self.fh, attr)
 
     class ManagerLog:
@@ -182,11 +194,8 @@ class Session(object):
         if self._wlog:
             return self._wlog
 
-        if self.taskconf.split:
-            makedirs(self.paths.workers)
-            wlog = self.WorkerLog(self.paths.workers) 
-        else:
-            wlog = self.ManagerLog(self.paths.log)
+        makedirs(self.paths.workers)
+        wlog = self.WorkerLog(self.paths.workers, False if self.taskconf.split else True) 
 
         self._wlog = wlog
         return wlog
@@ -196,10 +205,7 @@ class Session(object):
         if self._mlog:
             return self._mlog
 
-        if self.taskconf.split:
-            mlog = self.ManagerLog(self.paths.log) 
-        else:
-            mlog = self.wlog
+        mlog = self.ManagerLog(self.paths.log) 
 
         self._mlog = mlog
         return mlog
