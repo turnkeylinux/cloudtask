@@ -10,7 +10,7 @@
 # 
 
 from os.path import *
-from command import Command, fmt_argv
+from command import Command
 
 class SSH:
     class Error(Exception):
