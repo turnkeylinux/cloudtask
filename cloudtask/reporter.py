@@ -158,8 +158,6 @@ class ShellHandler:
         if taskconf.workers:
             os.environ['CLOUDTASK_WORKERS'] = " ".join(taskconf.workers)
 
-        os.environ
-
         os.system(self.command)
 
 class Reporter:
