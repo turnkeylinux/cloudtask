@@ -17,7 +17,10 @@ import shlex
 from email.Message import Message
 from command import Command
 
-import StringIO
+import traceback
+from StringIO import StringIO
+
+import logalyzer
 
 class Error(Exception):
     pass
@@ -96,7 +99,7 @@ class MailHandler:
 
     @staticmethod
     def fmt_taskconf(taskconf):
-        sio = StringIO.StringIO()
+        sio = StringIO()
 
         table = []
         for attr in ('split', 'command',
@@ -122,14 +125,37 @@ class MailHandler:
         return sio.getvalue()
 
     def __call__(self, session):
-        mlog = file(session.paths.log).read()
         taskconf = session.taskconf
 
-        body = self.fmt_taskconf(taskconf) + mlog
+        jobs_total = len(session.jobs.pending) + len(session.jobs.finished)
+        jobs_completed = len([ job for job, result in session.jobs.finished if result=="EXIT=0" ])
+        jobs_incomplete = jobs_total - jobs_completed
+
+        command = re.sub(r'^\S*/', '', taskconf['command'])
+
+        title = "session %d: %d/%d !OK (%s)" % (session.id, jobs_incomplete, jobs_total, command)
+
+        try:
+            body = logalyzer.logalyzer(session.paths.path)
+        except Exception:
+            sio = StringIO()
+            def header(title, c):
+                return title + "\n" + len(title) * c + "\n"
+
+            print >> sio, header("Logalyzer failure", "=")
+            traceback.print_exc(file=sio)
+            print >> sio
+            print >> sio, header("Fallback session log", "=")
+            print >> sio, self.fmt_taskconf(taskconf)
+
+            mlog = file(session.paths.log).read()
+            print >> sio, mlog
+
+            body = sio.getvalue()
 
         for recipient in self.recipients:
 
-            subject = "[Cloudtask] " + taskconf.command
+            subject = "[Cloudtask] " + title
 
             self.sendmail(self.sender, recipient, 
                           subject, body)
