@@ -25,6 +25,8 @@ import executil
 from taskconf import TaskConf
 import pprint
 
+import re
+
 def makedirs(path, mode=0750):
     try:
         os.makedirs(path, mode)
@@ -114,10 +116,17 @@ class Session(object):
             self.tee = tee
 
         def write(self, buf):
-            self.fh.write(buf)
             if self.tee:
                 sys.stdout.write(buf)
                 sys.stdout.flush()
+
+            # filter progress bars and other return-carriage crap
+            buf = re.sub(r'\r[^\r\n]+$', '', buf)
+            buf = re.sub(r'.*\r(?![\r\n])','', buf)
+            buf = re.sub(r'\r+\n', '\n', buf)
+
+            if buf:
+                self.fh.write(buf)
 
         def __getattr__(self, attr):
             return getattr(self.fh, attr)

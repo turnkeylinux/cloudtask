@@ -177,8 +177,8 @@ class CloudWorker:
         read_timeout = Timeout(self.ssh.TIMEOUT)
         def handler(ssh_command, buf):
             if buf:
-                self.wlog.write(buf)
                 read_timeout.reset()
+                self.wlog.write(buf)
 
             if ssh_command.running and timeout.expired():
                 print >> self.wlog
