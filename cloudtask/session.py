@@ -115,15 +115,22 @@ class Session(object):
             self.path = path
             self.tee = tee
 
+        @staticmethod
+        def _filter(buf):
+            buf = re.sub(r'Connection to \S+ closed\.\r+\n', '', buf)
+            buf = re.sub(r'\r[^\r\n]+$', '', buf)
+            buf = re.sub(r'.*\r(?![\r\n])','', buf)
+            buf = re.sub(r'\r+\n', '\n', buf)
+
+            return buf
+
         def write(self, buf):
             if self.tee:
                 sys.stdout.write(buf)
                 sys.stdout.flush()
 
             # filter progress bars and other return-carriage crap
-            buf = re.sub(r'\r[^\r\n]+$', '', buf)
-            buf = re.sub(r'.*\r(?![\r\n])','', buf)
-            buf = re.sub(r'\r+\n', '\n', buf)
+            buf = self._filter(buf)
 
             if buf:
                 self.fh.write(buf)
