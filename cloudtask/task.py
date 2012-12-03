@@ -377,6 +377,9 @@ class Task:
         if reporter:
             reporter.report(session)
 
+        if session.jobs.pending:
+            sys.exit(1)
+
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:
     setattr(Task, 
