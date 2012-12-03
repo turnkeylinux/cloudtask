@@ -307,6 +307,7 @@ class CloudExecutor:
 
     def stop(self):
         if not self.split:
+            self._execute = None
             return
 
         self.event_stop.set()
@@ -316,4 +317,5 @@ class CloudExecutor:
     def join(self):
         if self.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
-            self.stop()
+
+        self.stop()
