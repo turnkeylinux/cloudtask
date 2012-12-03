@@ -369,12 +369,13 @@ class Task:
         print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
                                 (session.id, len(exitcodes), session.elapsed, succeeded, failed)
 
-        if reporter:
-            reporter.report(session)
-
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
-            sys.exit(1)
+
+        session.mlog.close()
+
+        if reporter:
+            reporter.report(session)
 
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:
