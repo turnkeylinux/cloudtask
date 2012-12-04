@@ -130,7 +130,7 @@ class Task:
             if isinstance(val, list):
                 val = " ".join(val)
             if not val:
-                val = "-"
+                continue
             table.append((attr, val))
 
         print >> sys.stderr

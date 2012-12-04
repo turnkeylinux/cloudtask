@@ -111,7 +111,7 @@ class MailHandler:
             if isinstance(val, list):
                 val = " ".join(val)
             if not val:
-                val = "-"
+                continue
             table.append((attr, val))
 
         print >> sio, "  Parameter       Value"
