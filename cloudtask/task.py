@@ -78,6 +78,7 @@ from reporter import Reporter
 
 class Task:
 
+    COMMAND = None
     DESCRIPTION = None
     SESSIONS = None
 
