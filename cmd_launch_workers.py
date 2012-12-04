@@ -150,8 +150,8 @@ def main():
     def callback():
         return not stopped.value
 
-    for address in Hub(hub_apikey).launch(howmany, callback, **kwargs):
-        print >> output, address
+    for ipaddress, instanceid in Hub(hub_apikey).launch(howmany, callback=callback, **kwargs):
+        print >> output, ipaddress
         output.flush()
 
 if __name__ == "__main__":

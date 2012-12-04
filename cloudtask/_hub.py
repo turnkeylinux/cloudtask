@@ -15,7 +15,7 @@ class Error(Exception):
     pass
 
 class Hub(Spawner):
-    def launch(self, howmany, callback=None, **kwargs):
+    def launch(self, howmany, logfh=None, callback=None, **kwargs):
         """launch <howmany> workers, wait until booted and return their public IP addresses.
 
         Invoke callback every frequently. If callback returns False, we terminate launching.
@@ -31,4 +31,4 @@ class Hub(Spawner):
             raise Error("can't force together unrelated ami and snapshot")
 
         name = snapshot_id or ami_id or 'core'
-        return Spawner.launch(self, name, howmany, callback, **kwargs)
+        return Spawner.launch(self, name, howmany, logfh, callback, **kwargs)

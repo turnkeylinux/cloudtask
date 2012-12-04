@@ -61,7 +61,7 @@ class CloudWorker:
 
         return func
 
-    def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None, launchq=None):
+    def __init__(self, session, taskconf, ipaddress=None, destroy=None, event_stop=None, launchq=None):
 
         self.pid = os.getpid()
 
@@ -78,32 +78,36 @@ class CloudWorker:
         self.cleanup_command = taskconf.post
         self.user = taskconf.user
 
-        self.address = address
+        self.ipaddress = ipaddress
+        self.instanceid = None
+
         self.hub = None
         self.ssh = None
 
         if destroy is None:
-            if address:
+            if ipaddress:
                 destroy = False
             else:
                 destroy = True
         self.destroy = destroy
 
-        if not address:
+        if not ipaddress:
             if not taskconf.hub_apikey:
                 raise self.Error("can't auto launch a worker without a Hub API KEY")
             self.hub = Hub(taskconf.hub_apikey)
 
             with sigignore(signal.SIGINT, signal.SIGTERM):
                 if not launchq:
-                    self.address = list(self.hub.launch(1, **taskconf.ec2_opts))[0]
+                    instance = list(self.hub.launch(1, VerboseLog(session.mlog), **taskconf.ec2_opts))[0]
                 else:
-                    self.address = launchq.get()
+                    instance = launchq.get()
 
-            if not self.address or (event_stop and event_stop.is_set()):
+            if not instance or (event_stop and event_stop.is_set()):
                 raise self.Terminated
 
-            self.status("launched new worker")
+            self.ipaddress, self.instanceid = instance
+
+            self.status("launched worker %s" % self.instanceid)
 
         else:
             self.status("using existing worker")
@@ -111,7 +115,7 @@ class CloudWorker:
         self.handle_stop = self._stop_handler(event_stop)
 
         try:
-            self.ssh = SSH(self.address, 
+            self.ssh = SSH(self.ipaddress, 
                            identity_file=self.session_key.path, 
                            login_name=taskconf.user,
                            callback=self.handle_stop)
@@ -147,23 +151,27 @@ class CloudWorker:
             except:
                 pass
 
-        if self.destroy and self.address and self.hub:
-            destroyed = self.hub.destroy(self.address)
-            if self.address in destroyed:
-                self.status("destroyed worker")
+        if self.destroy and self.ipaddress and self.hub:
+            destroyed = [ (ipaddress, instanceid) 
+                          for ipaddress, instanceid in self.hub.destroy(self.ipaddress) 
+                          if ipaddress == self.ipaddress ]
+            
+            if destroyed:
+                ipaddress, instanceid = destroyed[0]
+                self.status("destroyed worker %s" % instanceid)
             else:
                 self.status("failed to destroy worker")
 
     def __getstate__(self):
-        return (self.address, self.pid)
+        return (self.ipaddress, self.pid)
 
     def __setstate__(self, state):
-        (self.address, self.pid) = state
+        (self.ipaddress, self.pid) = state
 
     def status(self, msg):
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-        print >> self.wlog.status, "# %s [%s] %s" % (timestamp, self.address, msg)
-        print >> self.mlog, "%s (%d): %s" % (self.address, os.getpid(), msg)
+        self.wlog.status.write("# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
+        self.mlog.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
 
     def __call__(self, command):
         timeout = self.timeout
@@ -230,32 +238,39 @@ class CloudWorker:
 
         self._cleanup()
 
+class VerboseLog:
+    def __init__(self, fh):
+        self.fh = fh
+
+    def write(self, s):
+        self.fh.write("# " + s)
+
 class CloudExecutor:
     class Error(Exception):
         pass
 
     def __init__(self, split, session, taskconf):
-        addresses = taskconf.workers
+        ipaddresses = taskconf.workers
         if split == 1:
             split = False
 
         if not split:
-            if addresses:
-                address = addresses[0]
+            if ipaddresses:
+                ipaddress = ipaddresses[0]
             else:
-                address = None
-            self._execute = CloudWorker(session, taskconf, address)
+                ipaddress = None
+            self._execute = CloudWorker(session, taskconf, ipaddress)
             self.results = []
 
         else:
-            addresses = copy.copy(addresses)
+            ipaddresses = copy.copy(ipaddresses)
 
             workers = []
             self.event_stop = Event()
             
             launchq = None
 
-            new_workers = split - len(addresses)
+            new_workers = split - len(ipaddresses)
             if new_workers > 0:
                 if not taskconf.hub_apikey:
                     raise self.Error("need API KEY to launch %d new workers" % new_workers)
@@ -269,8 +284,8 @@ class CloudExecutor:
                     hub = Hub(taskconf.hub_apikey)
                     i = None
                     try:
-                        for i, address in enumerate(hub.launch(new_workers, callback, **taskconf.ec2_opts)):
-                            launchq.put(address)
+                        for i, instance in enumerate(hub.launch(new_workers, VerboseLog(session.mlog), callback, **taskconf.ec2_opts)):
+                            launchq.put(instance)
                     except hub.Error, e:
                         unlaunched_workers = new_workers - (i + 1) \
                                              if i is not None \
@@ -285,12 +300,12 @@ class CloudExecutor:
                 threading.Thread(target=thread).start()
 
             for i in range(split):
-                if addresses:
-                    address = addresses.pop(0)
+                if ipaddresses:
+                    ipaddress = ipaddresses.pop(0)
                 else:
-                    address = None
+                    ipaddress = None
 
-                worker = Deferred(CloudWorker, session, taskconf, address, 
+                worker = Deferred(CloudWorker, session, taskconf, ipaddress, 
                                   event_stop=self.event_stop, launchq=launchq)
 
                 workers.append(worker)
