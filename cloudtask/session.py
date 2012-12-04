@@ -27,8 +27,6 @@ import pprint
 
 import re
 
-from multiprocessing import Lock
-
 def makedirs(path, mode=0750):
     try:
         os.makedirs(path, mode)
@@ -143,16 +141,11 @@ class Session(object):
     class ManagerLog:
         def __init__(self, path):
             self.fh = file(path, "a", 1)
-            self.lock = Lock()
 
         def write(self, buf):
-            self.lock.acquire()
-            try:
-                self.fh.write(buf)
-                sys.stdout.write(buf)
-                sys.stdout.flush()
-            finally:
-                self.lock.release()
+            self.fh.write(buf)
+            sys.stdout.write(buf)
+            sys.stdout.flush()
 
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
