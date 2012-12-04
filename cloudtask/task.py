@@ -22,9 +22,11 @@ Options:
     --force          Don't ask for confirmation
 
     --hub-apikey=    Hub API KEY (required if launching workers)
+
+    --snapshot-id=   Launch instance from a snapshot ID
     --backup-id=     TurnKey Backup ID to restore on launch
     --ami-id=        Force launch a specific AMI ID (default is the latest Core)
-
+    
     --ec2-region=    Region for instance launch (default: us-east-1)
     --ec2-size=      Instance launch size (default: m1.small)
     --ec2-type=      Instance launch type <s3|ebs> (default: s3)
@@ -121,7 +123,7 @@ class Task:
 
         for attr in ('split', 'command', 'hub-apikey', 
                      'ec2-region', 'ec2-size', 'ec2-type', 
-                     'user', 'backup-id', 'ami-id', 'workers', 
+                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers', 
                      'overlay', 'post', 'pre', 'timeout', 'report'):
 
             val = taskconf[attr.replace('-', '_')]

@@ -159,7 +159,7 @@ def logalyzer(session_path):
     c = conf
     workers = "%d x (%s)" % (c['split'] if c['split'] else 1,
                              " : ".join([ c[attr] 
-                                       for attr in ('ec2_region', 'ec2_size', 'ec2_type', 'ami_id') 
+                                       for attr in ('ec2_region', 'ec2_size', 'ec2_type', 'ami_id', 'snapshot_id') 
                                        if attr in c and c[attr] ]))
 
     fields = conf

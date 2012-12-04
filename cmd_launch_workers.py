@@ -22,7 +22,8 @@ Options:
     --hub-apikey       Hub APIKEY
                        Environment: HUB_APIKEY
 
-    --backup-id        TurnKey Backup ID to restore
+    --snapshot-id      Launch instance from a snapshot ID
+    --backup-id        TurnKey Backup ID to restore on launch
     --ami-id           Force launch a specific AMI ID (default is the latest Core)
 
     --region           Region for instance launch (default: us-east-1)
@@ -84,6 +85,7 @@ def main():
         'label': "Cloudtask worker",
         'backup_id': None,
         'ami_id': None,
+        'snapshot_id': None,
     }
 
     hub_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_HUB_APIKEY'))

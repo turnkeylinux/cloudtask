@@ -26,6 +26,7 @@ class TaskConf:
     hub_apikey = None
     backup_id = None
     ami_id = None
+    snapshot_id = None
 
     ec2_region = 'us-east-1'
     ec2_size = 'm1.small'
@@ -63,10 +64,10 @@ class TaskConf:
                        for attr in self.__all__ 
                        if attr.startswith('ec2_') ])
         opts['label'] = 'Cloudtask: ' + self.command
-        if self.backup_id:
-            opts['backup_id'] = self.backup_id
 
-        if self.ami_id:
-            opts['ami_id'] = self.ami_id
+        for attrname in ('backup_id', 'ami_id', 'snapshot_id'):
+            val = getattr(self, attrname)
+            if val:
+                opts[attrname] = val
 
         return opts
