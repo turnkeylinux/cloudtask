@@ -150,17 +150,9 @@ class Session(object):
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
 
-    def __init__(self, sessions_path, id=None):
-        if not exists(sessions_path):
-            makedirs(sessions_path)
-
-        if not isdir(sessions_path):
-            raise self.Error("sessions path is not a directory: " + sessions_path)
-
-        new_session = False
-        if not id:
-            new_session = True
-
+    @staticmethod
+    def new_session_id(sessions_path):
+        while True:
             session_ids = [ int(fname) for fname in os.listdir(sessions_path) 
                             if fname.isdigit() ]
 
@@ -170,14 +162,28 @@ class Session(object):
                 new_session_id = 1
 
             id = new_session_id
+            try:
+                os.mkdir(join(sessions_path, "%d" % id))
+            except OSError, e:
+                if e.errno != errno.EEXIST:
+                    raise
+                continue
+
+            return id
+
+    def __init__(self, sessions_path, id=None):
+        if not exists(sessions_path):
+            makedirs(sessions_path)
+
+        if not isdir(sessions_path):
+            raise self.Error("sessions path is not a directory: " + sessions_path)
+
+        if not id:
+            id = self.new_session_id(sessions_path)
 
         path = join(sessions_path, "%d" % id)
-
-        if new_session:
-            makedirs(path)
-        else:
-            if not isdir(path):
-                raise self.Error("no such session '%s'" % id)
+        if not isdir(path):
+            raise self.Error("no such session '%s'" % id)
 
         self.paths = Session.Paths(path)
         self.jobs = self.Jobs(self.paths.jobs)
