@@ -107,8 +107,6 @@ class Task:
 
     @classmethod
     def confirm(cls, taskconf, split, jobs):
-        print >> sys.stderr, "About to launch %d cloud server%s to execute the following task:" % (split, "s" if split and split > 1 else "")
-
         def filter(job):
             job = re.sub('^\s*', '', job[len(taskconf.command):])
             return job
@@ -119,28 +117,11 @@ class Task:
         job_range = ("%s .. %s" % (job_first, job_last) 
                      if job_first != job_last else "%s" % job_first)
 
-        table = [ ('jobs', '%d (%s)' % (len(jobs), job_range)) ]
+        print >> sys.stderr, "About to launch %d cloud server%s to execute %d jobs (%s):" % (split, 
+                                                                                             "s" if split and split > 1 else "",
+                                                                                             len(jobs), job_range)
 
-        for attr in ('split', 'command', 'hub-apikey', 
-                     'ec2-region', 'ec2-size', 'ec2-type', 
-                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers', 
-                     'overlay', 'post', 'pre', 'timeout', 'report'):
-
-            val = taskconf[attr.replace('-', '_')]
-            if isinstance(val, list):
-                val = " ".join(val)
-            if not val:
-                continue
-            table.append((attr, val))
-
-        print >> sys.stderr
-        print >> sys.stderr, "  Parameter       Value"
-        print >> sys.stderr, "  ---------       -----"
-        print >> sys.stderr
-        for row in table:
-            print >> sys.stderr, "  %-15s %s" % (row[0], row[1])
-
-        print >> sys.stderr
+        print >> sys.stderr, "\n" + taskconf.fmt()
 
         orig_stdin = sys.stdin 
         sys.stdin = os.fdopen(sys.stderr.fileno(), 'r')

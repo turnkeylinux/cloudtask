@@ -9,6 +9,8 @@
 # option) any later version.
 # 
 
+from StringIO import StringIO
+
 class TaskConf:
     user = 'root'
 
@@ -71,3 +73,27 @@ class TaskConf:
                 opts[attrname] = val
 
         return opts
+
+    def fmt(self):
+        sio = StringIO()
+
+        table = []
+        for attr in ('split', 'command', 'hub-apikey', 
+                     'ec2-region', 'ec2-size', 'ec2-type', 
+                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers', 
+                     'overlay', 'post', 'pre', 'timeout', 'report'):
+
+            val = self[attr.replace('-', '_')]
+            if isinstance(val, list):
+                val = " ".join(val)
+            if not val:
+                continue
+            table.append((attr, val))
+
+        print >> sio, "  Parameter       Value"
+        print >> sio, "  ---------       -----"
+        print >> sio
+        for row in table:
+            print >> sio, "  %-15s %s" % (row[0], row[1])
+
+        return sio.getvalue()

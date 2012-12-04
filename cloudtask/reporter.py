@@ -97,33 +97,6 @@ class MailHandler:
         self.recipients = args[1:]
         self.sendmail = self.Sendmail()
 
-    @staticmethod
-    def fmt_taskconf(taskconf):
-        sio = StringIO()
-
-        table = []
-        for attr in ('split', 'command',
-                     'ec2-region', 'ec2-size', 'ec2-type',
-                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers',
-                     'overlay', 'post', 'pre', 'timeout', 'report'):
-
-            val = taskconf[attr.replace('-', '_')]
-            if isinstance(val, list):
-                val = " ".join(val)
-            if not val:
-                continue
-            table.append((attr, val))
-
-        print >> sio, "  Parameter       Value"
-        print >> sio, "  ---------       -----"
-        print >> sio
-        for row in table:
-            print >> sio, "  %-15s %s" % (row[0], row[1])
-
-        print >> sio
-
-        return sio.getvalue()
-
     def __call__(self, session):
         taskconf = session.taskconf
 
@@ -146,7 +119,7 @@ class MailHandler:
             traceback.print_exc(file=sio)
             print >> sio
             print >> sio, header("Fallback session log", "=")
-            print >> sio, self.fmt_taskconf(taskconf)
+            print >> sio, taskconf.fmt()
 
             mlog = file(session.paths.log).read()
             print >> sio, mlog
