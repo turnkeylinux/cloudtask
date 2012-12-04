@@ -62,6 +62,8 @@ import sys
 import getopt
 
 import signal
+from sighandle import sighandle
+
 from cloudtask import Hub
 from lazyclass import lazyclass
 
@@ -143,16 +145,16 @@ def main():
     stopped = Bool()
 
     def handler(s, f):
+        print >> sys.stderr, "caught SIGINT, stopping launch"
         stopped.value = True
 
-    signal.signal(signal.SIGINT, handler)
+    with sighandle(handler, signal.SIGINT):
+        def callback():
+            return not stopped.value
 
-    def callback():
-        return not stopped.value
-
-    for ipaddress, instanceid in Hub(hub_apikey).launch(howmany, callback=callback, **kwargs):
-        print >> output, ipaddress
-        output.flush()
+        for ipaddress, instanceid in Hub(hub_apikey).launch(howmany, logfh=sys.stderr, callback=callback, **kwargs):
+            print >> output, ipaddress
+            output.flush()
 
 if __name__ == "__main__":
     main()
