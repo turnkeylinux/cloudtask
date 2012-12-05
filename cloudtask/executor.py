@@ -9,6 +9,8 @@
 # option) any later version.
 # 
 
+import sys
+
 import os
 import time
 import traceback
@@ -177,9 +179,11 @@ class CloudWorker:
     def __setstate__(self, state):
         (self.ipaddress, self.pid) = state
 
-    def status(self, msg):
+    def status(self, msg, after_output=False):
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-        self.wlog.status.write("# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
+
+        c = "\n" if after_output else ""
+        self.wlog.status.write(c + "# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
         self.mlog.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
 
     def __call__(self, command):
@@ -192,16 +196,20 @@ class CloudWorker:
 
         timeout = Timeout(timeout)
         read_timeout = Timeout(self.ssh.TIMEOUT)
+
+        class CommandTimeout(Exception):
+            pass
+
+        class WorkerDied(Exception):
+            pass
+
         def handler(ssh_command, buf):
             if buf:
                 read_timeout.reset()
                 self.wlog.write(buf)
 
             if ssh_command.running and timeout.expired():
-                print >> self.wlog
-                ssh_command.terminate()
-                self.status("timeout %d # %s" % (timeout.seconds, command))
-                return
+                raise CommandTimeout
 
             if read_timeout.expired():
                 for retry in range(self.SSH_PING_RETRIES):
@@ -211,10 +219,7 @@ class CloudWorker:
                     except self.ssh.Error, e:
                         pass
                 else:
-                    ssh_command.terminate()
-                    print >> self.wlog
-                    self.status("worker died (%s) # %s" % (e, command))
-                    raise SSH.TimeoutError
+                    raise WorkerDied(e)
 
                 read_timeout.reset()
 
@@ -226,20 +231,29 @@ class CloudWorker:
 
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except self.Terminated:
-            ssh_command.terminate()
-            print >> self.wlog
-            self.status("terminated # %s" % command)
+            self.status("terminated # %s" % command, True)
             raise
 
-        if ssh_command.exitcode is not None:
+        except WorkerDied, e:
+            self.status("worker died (%s) # %s" % (e, command), True)
+            raise SSH.TimeoutError
+
+        except CommandTimeout:
+            self.status("timeout %d # %s" % (timeout.seconds, command), True)
+            exitcode = None
+
+        else:
             if ssh_command.exitcode == 255 and re.match(r'^ssh: connect to host.*:.*$', ssh_command.output):
                 self.status("worker unreachable # %s" % command)
                 raise SSH.Error(ssh_command.output)
 
-            print >> self.wlog
-            self.status("exit %d # %s" % (ssh_command.exitcode, command))
+            self.status("exit %d # %s" % (ssh_command.exitcode, command), True)
+            exitcode = ssh_command.exitcode
 
-        return (str(command), ssh_command.exitcode)
+        finally:
+            ssh_command.terminate()
+
+        return (str(command), exitcode)
 
     def __del__(self):
         if os.getpid() != self.pid:
