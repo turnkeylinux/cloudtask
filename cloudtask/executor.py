@@ -9,8 +9,6 @@
 # option) any later version.
 # 
 
-from __future__ import with_statement
-
 import os
 import time
 import traceback
@@ -21,7 +19,7 @@ import re
 from multiprocessing import Event, Queue
 from multiprocessing_utils import Parallelize, Deferred
 
-from sigignore import sigignore
+import sighandle
 
 from ssh import SSH
 from _hub import Hub
@@ -96,11 +94,22 @@ class CloudWorker:
                 raise self.Error("can't auto launch a worker without a Hub API KEY")
             self.hub = Hub(taskconf.hub_apikey)
 
-            with sigignore(signal.SIGINT, signal.SIGTERM):
-                if not launchq:
-                    instance = list(self.hub.launch(1, VerboseLog(session.mlog), **taskconf.ec2_opts))[0]
-                else:
+            if launchq:
+                with sighandle.sigignore(signal.SIGINT, signal.SIGTERM):
                     instance = launchq.get()
+            else:
+                class Bool:
+                    value = False
+                stopped = Bool()
+
+                def handler(s, f):
+                    stopped.value = True
+
+                with sighandle.sighandle(handler, signal.SIGINT, signal.SIGTERM):
+                    def callback():
+                        return not stopped.value
+
+                    instance = list(self.hub.launch(1, VerboseLog(session.mlog), callback, **taskconf.ec2_opts))[0]
 
             if not instance or (event_stop and event_stop.is_set()):
                 raise self.Terminated
