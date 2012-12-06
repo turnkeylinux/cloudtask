@@ -359,8 +359,6 @@ class Task:
         if session.jobs.pending:
             print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
 
-        session.mlog.close()
-
         if reporter:
             reporter.report(session)
 
