@@ -42,6 +42,15 @@ class Timeout:
     def reset(self):
         self.started = time.time()
 
+class Job:
+    class Retry(Parallelize.Worker.Retry):
+        pass
+
+    def __init__(self, command, retry_limit):
+        self.command = command
+        self.retry = 0
+        self.retry_limit = retry_limit
+
 class CloudWorker:
     SSH_PING_RETRIES = 3
 
@@ -186,7 +195,8 @@ class CloudWorker:
         self.wlog.status.write(c + "# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
         self.mlog.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
 
-    def __call__(self, command):
+    def __call__(self, job):
+        command = job.command
         timeout = self.timeout
 
         self.handle_stop()
@@ -252,6 +262,10 @@ class CloudWorker:
 
         finally:
             ssh_command.terminate()
+
+        if ssh_command.exitcode != 0 and job.retry < job.retry_limit:
+            job.retry += 1
+            raise job.Retry
 
         return (str(command), exitcode)
 
@@ -337,11 +351,21 @@ class CloudExecutor:
             self.results = self._execute.results
 
         self.split = split
+        self.job_retry_limit = taskconf.retries
 
     def __call__(self, job):
-        result = self._execute(job)
-        if not self.split:
-            self.results.append(result)
+        if not isinstance(job, Job):
+            job = Job(job, self.job_retry_limit)
+
+        if self.split:
+            return self._execute(job)
+
+        try:
+            result = self._execute(job)
+        except job.Retry:
+            return self(job)
+
+        self.results.append(result)
 
     def stop(self):
         if not self.split:

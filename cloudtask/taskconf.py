@@ -21,6 +21,7 @@ class TaskConf:
     overlay = None
 
     timeout = 3600
+    retries = 0
 
     split = None
     workers = []

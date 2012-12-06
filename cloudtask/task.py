@@ -33,7 +33,8 @@ Options:
 
     --sessions=      Path where sessions are stored (default: $HOME/.cloudtask)
 
-    --timeout=       How many seconds to wait before giving up (default: 3600)
+    --retries=       How many times to retry a failed job (default: 0)
+    --timeout=       How many seconds to wait for a job before failing (default: 3600)
     --user=          Username to execute commands as (default: root)
     --pre=           Worker setup command
     --post=          Worker cleanup command
@@ -212,6 +213,9 @@ class Task:
 
             elif opt == '--timeout':
                 taskconf.timeout = int(val)
+
+            elif opt == '--retries':
+                taskconf.retries = int(val)
 
             elif opt == '--split':
                 taskconf.split = int(val)
