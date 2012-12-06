@@ -271,8 +271,8 @@ class CloudWorker:
                 raise self.Error
 
             if job.retry < job.retry_limit:
-                self.status("retry %d / %d" % (job.retry, job.retry_limit))
                 job.retry += 1
+                self.status("will retry (%d of %d)" % (job.retry, job.retry_limit))
 
                 raise job.Retry
         else:
