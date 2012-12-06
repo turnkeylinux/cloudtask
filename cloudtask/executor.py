@@ -54,7 +54,7 @@ class CloudWorker:
 
     Terminated = Parallelize.Worker.Terminated
 
-    class Error(Exception):
+    class Error(Terminated):
         pass
 
     @classmethod
@@ -247,7 +247,7 @@ class CloudWorker:
 
         except WorkerDied, e:
             self.status("worker died (%s) # %s" % (e, command), True)
-            raise SSH.TimeoutError
+            raise self.Error(e)
 
         except CommandTimeout:
             self.status("timeout %d # %s" % (timeout.seconds, command), True)
@@ -256,7 +256,8 @@ class CloudWorker:
         else:
             if ssh_command.exitcode == 255 and re.match(r'^ssh: connect to host.*:.*$', ssh_command.output):
                 self.status("worker unreachable # %s" % command)
-                raise SSH.Error(ssh_command.output)
+                self.wlog.write("%s\n" % ssh_command.output)
+                raise self.Error(SSH.Error(ssh_command.output))
 
             self.status("exit %d # %s" % (ssh_command.exitcode, command), True)
             exitcode = ssh_command.exitcode
@@ -267,7 +268,7 @@ class CloudWorker:
         if ssh_command.exitcode != 0:
             self.strike += 1
             if self.strikes and self.strike >= self.strikes:
-                self.status("worker reached %d strikes, terminating" % self.strikes)
+                self.status("terminating worker after %d strikes" % self.strikes)
                 raise self.Error
 
             if job.retry < job.retry_limit:
