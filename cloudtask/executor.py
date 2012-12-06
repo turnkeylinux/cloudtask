@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -8,8 +8,6 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 # 
-
-import sys
 
 import os
 import time
