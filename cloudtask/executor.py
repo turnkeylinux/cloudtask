@@ -81,6 +81,9 @@ class CloudWorker:
         self.mlog = session.mlog
         self.session_key = session.key
 
+        self.strikes = taskconf.strikes
+        self.strike = 0
+
         self.timeout = taskconf.timeout
         self.cleanup_command = taskconf.post
         self.user = taskconf.user
@@ -261,9 +264,19 @@ class CloudWorker:
         finally:
             ssh_command.terminate()
 
-        if ssh_command.exitcode != 0 and job.retry < job.retry_limit:
-            job.retry += 1
-            raise job.Retry
+        if ssh_command.exitcode != 0:
+            self.strike += 1
+            if self.strikes and self.strike >= self.strikes:
+                self.status("worker reached %d strikes, terminating" % self.strikes)
+                raise self.Error
+
+            if job.retry < job.retry_limit:
+                self.status("retry %d / %d" % (job.retry, job.retry_limit))
+                job.retry += 1
+
+                raise job.Retry
+        else:
+            self.strike = 0
 
         return (str(command), exitcode)
 

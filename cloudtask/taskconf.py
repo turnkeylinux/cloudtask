@@ -22,6 +22,7 @@ class TaskConf:
 
     timeout = 3600
     retries = 0
+    strikes = 0
 
     split = None
     workers = []

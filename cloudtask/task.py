@@ -33,8 +33,10 @@ Options:
 
     --sessions=      Path where sessions are stored (default: $HOME/.cloudtask)
 
-    --retries=       How many times to retry a failed job (default: 0)
     --timeout=       How many seconds to wait for a job before failing (default: 3600)
+    --retries=       How many times to retry a failed job (default: 0)
+    --strikes=       How many consecutive failures before we dismiss worker (default: 0 - disabled)
+
     --user=          Username to execute commands as (default: root)
     --pre=           Worker setup command
     --post=          Worker cleanup command
@@ -48,7 +50,7 @@ Options:
     --report=        Task reporting hook, examples:
 
                      sh: command || py: file || py: code
-                     mail: from@foo.com to@bar.com 
+                     mail: from@foo.com to@bar.com
 
 Usage:
 
@@ -211,12 +213,6 @@ class Task:
 
                 taskconf.overlay = abspath(val)
 
-            elif opt == '--timeout':
-                taskconf.timeout = int(val)
-
-            elif opt == '--retries':
-                taskconf.retries = int(val)
-
             elif opt == '--split':
                 taskconf.split = int(val)
                 if taskconf.split < 1:
@@ -233,6 +229,9 @@ class Task:
 
                 if taskconf.backup_id < 1:
                     error("--backup-id can't be smaller than 1")
+
+            elif opt[2:] in ('timeout', 'retries', 'strikes'):
+                setattr(taskconf, opt[2:], int(val))
 
             else:
                 opt = opt[2:]
