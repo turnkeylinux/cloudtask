@@ -354,11 +354,11 @@ class Task:
 
         succeeded = exitcodes.count(0)
         timeouts = exitcodes.count(None)
-        failed = len([ exitcode for exitcode in exitcodes if exitcode ])
+        errors = len([ exitcode for exitcode in exitcodes if exitcode ])
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d failed" % \
-                (session.id, session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, failed)
+        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors" % \
+                (session.id, session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, errors)
         
 
         if reporter:
