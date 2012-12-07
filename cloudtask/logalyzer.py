@@ -33,7 +33,7 @@ class WorkersLog:
         def __init__(self, timestamp, title):
             self.timestamp = datetime.strptime(timestamp, self.TIMESTAMP_FMT)
             self.title = title
-            self.body = None
+            self.body = ""
 
         def __repr__(self):
             return "LogEntry%s" % `datetime.strftime(self.timestamp, self.TIMESTAMP_FMT), self.title`
@@ -132,17 +132,27 @@ def logalyzer(session_path):
     conf = eval(file(session_paths.conf).read())
     log = file(session_paths.log).read()
 
-    m = re.search(r'^session (\d+): (\d+) jobs in (\d+) seconds \((\d+) succeeded, (\d+) failed\)', log, 
-                  re.MULTILINE)
+    m = re.search(r'^session (\d+).*(\d+) seconds', log, re.MULTILINE)
     if not m:
         raise Error("couldn't find session summary")
 
-    summary = {}
-    vals = map(int, m.groups())
-    for i, attrname in enumerate(('id', 'jobs', 'elapsed', 'completed', 'failed')):
-        summary[attrname] = vals[i]
+    id, elapsed = map(int, m.groups())
 
-    s = summary
+    jobs = Session.Jobs(session_paths.jobs)
+
+    # calculate stats
+    
+    results = [ result for command, result in jobs.finished ]
+
+    class stats:
+        pending = len(jobs.pending)
+        finished = len(jobs.finished)
+        total = pending + finished
+        succeeded = results.count('EXIT=0')
+
+        failures = len(results) - succeeded
+        failures_timeouts = results.count('TIMEOUT')
+        failures_errors = len(results) - succeeded - failures_timeouts
 
     sio = StringIO()
 
@@ -150,8 +160,8 @@ def logalyzer(session_path):
         c = "=-"[level]
         return s + "\n" + c * len(s) + "\n"
 
-    print >> sio, header(0, "session %d: %s elapsed, %d jobs - %d failed, %d completed" % 
-                            (s['id'], fmt_elapsed(s['elapsed']), s['jobs'], s['failed'], s['completed']))
+    print >> sio, header(0, "session %d: %s elapsed, %d jobs - %d pending, %d failed, %d completed" % 
+                            (id, fmt_elapsed(elapsed), stats.total, stats.pending, stats.failures, stats.succeeded))
 
     print >> sio, "Configuration:"
     print >> sio
@@ -173,18 +183,23 @@ def logalyzer(session_path):
 
     wl = WorkersLog(session_paths.workers, conf['command'])
 
+    if stats.pending:
+        print >> sio, header(0, "%d pending jobs" % stats.pending)
+        print >> sio, " ".join([ job[len(conf['command']):].strip() for job in jobs.pending ])
+        print >> sio
+
     jobs = wl.jobs[:]
     jobs.sort(lambda a,b: cmp((a.worker_id, b.elapsed), (b.worker_id, a.elapsed)))
-
-    failures = [ job for job in jobs if job.result != 'exit 0' ]
-
-    if failures:
-        single_failure = (len(failures) == 1)
-
-        print >> sio, header(0, "Failed %d jobs" % len(failures))
+    
+    if stats.failures:
+        single_failure = (stats.failures == 1)
+        print >> sio, header(0, "%d failed - errors: %d, timeout: %d" % (stats.failures, 
+                                                                              stats.failures_errors,
+                                                                              stats.failures_timeouts))
         if not single_failure:
             print >> sio, header(1, "Summary")
 
+        failures = [ job for job in jobs if job.result != 'exit 0' ]
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.result, job.worker_id)
                   for job in failures ]
 
@@ -203,15 +218,18 @@ def logalyzer(session_path):
             if not single_failure:
                 print >> sio, fmted_row
                 print >> sio
-            print >> sio, indent(4, "\n".join(failures[i].output.splitlines()[-5:]))
-            print >> sio
 
-    completed = [ job for job in jobs if job.result == 'exit 0' ]
-    if completed:
-        print >> sio, header(0, "Completed %d jobs" % len(completed))
+            if failures[i].output:
+                print >> sio, indent(4, "\n".join(failures[i].output.splitlines()[-5:]))
+                print >> sio
 
+    if stats.succeeded:
+        print >> sio, header(0, "%d succeeded" % stats.succeeded)
+
+        completed = [ job for job in jobs if job.result == 'exit 0' ]
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
                   for job in completed ]
+        print stats.succeeded
         fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 
                                 groupby=lambda a: a[2])
         print >> sio, fmted_table
