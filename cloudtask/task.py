@@ -286,6 +286,10 @@ class Task:
 
             jobs = []
             for line in sys.stdin.readlines():
+                line = re.sub('#.*', '', line)
+                line = line.strip()
+                if not line:
+                    continue
                 args = shlex.split(line)
 
                 if isinstance(command, str):
@@ -294,6 +298,9 @@ class Task:
                     job = fmt_argv(command + args)
 
                 jobs.append(job)
+
+            if not jobs:
+                error("no jobs, nothing to do")
 
         split = taskconf.split if taskconf.split else 1
         if split > len(jobs):
