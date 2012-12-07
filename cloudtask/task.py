@@ -312,9 +312,15 @@ class Task:
 
         print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
 
+        class CaughtSignal(CloudWorker.Terminated):
+            pass
+
         def terminate(sig, f):
             signal.signal(sig, signal.SIG_IGN)
-            raise CloudWorker.Terminated("caught signal (%d) to terminate" % sig, sig)
+            sigs = dict([ ( getattr(signal, attr), attr) 
+                            for attr in dir(signal) if attr.startswith("SIG") ])
+
+            raise CaughtSignal("caught %s termination signal" % sigs[sig], sig)
 
         signal.signal(signal.SIGINT, terminate)
         signal.signal(signal.SIGTERM, terminate)
@@ -327,9 +333,13 @@ class Task:
                 executor(job)
 
             executor.join()
+            results = executor.results
 
         except Exception, e:
-            if not isinstance(e, CloudWorker.Error):
+            if isinstance(e, CaughtSignal):
+                print >> session.mlog,  "# " + str(e[0])
+
+            elif not isinstance(e, (CloudWorker.Error, CloudWorker.Terminated)):
                 traceback.print_exc(file=session.mlog)
 
             if executor:
@@ -338,31 +348,23 @@ class Task:
             else:
                 results = []
 
-            session.jobs.update(jobs, results)
-            print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
-                                    (session.id, 
-                                     len(session.jobs.finished), 
-                                     len(session.jobs.pending))
+        session.jobs.update(jobs, results)
 
-            sys.exit(1)
-
-        session.jobs.update(jobs, executor.results)
-
-        exitcodes = [ exitcode for command, exitcode in executor.results ]
+        exitcodes = [ exitcode for command, exitcode in results ]
 
         succeeded = exitcodes.count(0)
-        failed = len(exitcodes) - succeeded
+        timeouts = exitcodes.count(None)
+        failed = len([ exitcode for exitcode in exitcodes if exitcode ])
+        total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
-                                (session.id, len(exitcodes), session.elapsed, succeeded, failed)
-
-        if session.jobs.pending:
-            print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
+        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d failed" % \
+                (session.id, session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, failed)
+        
 
         if reporter:
             reporter.report(session)
 
-        if session.jobs.pending:
+        if succeeded != total:
             sys.exit(1)
 
 # set default class values to TaskConf defaults
