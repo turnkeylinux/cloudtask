@@ -250,7 +250,7 @@ class CloudWorker:
             raise self.Error(e)
 
         except CommandTimeout:
-            self.status("timeout %d # %s" % (timeout.seconds, command), True)
+            self.status("timeout # %s" % command, True)
             exitcode = None
 
         else:
