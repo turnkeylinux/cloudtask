@@ -357,15 +357,19 @@ class Task:
 
         session.jobs.update(jobs, results)
 
-        exitcodes = [ exitcode for command, exitcode in results ]
+        session_results = [ result for job, result in session.jobs.finished ]
+        pending = len(session.jobs.pending)
 
-        succeeded = exitcodes.count(0)
-        timeouts = exitcodes.count(None)
-        errors = len([ exitcode for exitcode in exitcodes if exitcode ])
+        succeeded = session_results.count("EXIT=0")
+        pending = len(session.jobs.pending)
+        timeouts = session_results.count("TIMEOUT")
+        errors = len(session_results) - succeeded - timeouts
+
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors" % \
-                (session.id, session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, errors)
+        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
+                (session.id, session.elapsed, 
+                 total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded)
         
 
         if reporter:
