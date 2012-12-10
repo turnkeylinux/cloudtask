@@ -340,7 +340,7 @@ class CloudExecutor:
                     try:
                         for i, instance in enumerate(hub.launch(new_workers, VerboseLog(session.mlog), callback, **taskconf.ec2_opts)):
                             launchq.put(instance)
-                    except hub.Error, e:
+                    except Exception, e:
                         unlaunched_workers = new_workers - (i + 1) \
                                              if i is not None \
                                              else new_workers
