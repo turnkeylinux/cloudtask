@@ -173,15 +173,20 @@ class CloudWorker:
                 pass
 
         if self.destroy and self.ipaddress and self.hub:
-            destroyed = [ (ipaddress, instanceid) 
-                          for ipaddress, instanceid in self.hub.destroy(self.ipaddress) 
-                          if ipaddress == self.ipaddress ]
-            
-            if destroyed:
-                ipaddress, instanceid = destroyed[0]
-                self.status("destroyed worker %s" % instanceid)
-            else:
-                self.status("failed to destroy worker")
+            try:
+                destroyed = [ (ipaddress, instanceid) 
+                              for ipaddress, instanceid in self.hub.destroy(self.ipaddress) 
+                              if ipaddress == self.ipaddress ]
+                
+                if destroyed:
+                    ipaddress, instanceid = destroyed[0]
+                    self.status("destroyed worker %s" % instanceid)
+                else:
+                    raise self.Error("Hub didn't destroy worker instance as requested!")
+            except:
+                self.status("failed to destroy worker %s" % self.instanceid)
+                traceback.print_exc(file=self.wlog)
+                raise
 
     def __getstate__(self):
         return (self.ipaddress, self.pid)
