@@ -87,7 +87,7 @@ class WorkersLog:
             return "Instance%s" % `self.worker_id, self.instance_id, self.seconds`
 
     @classmethod
-    def get_jobs(cls, log_entries, worker_id, command):
+    def get_jobs(cls, log_entries, command):
         pat = re.compile(r'^(.*?) # %s (.*)' % command)
 
         jobs = []
@@ -97,7 +97,7 @@ class WorkersLog:
                 result, name = m.groups()
                 started = log_entries[i-1]
                 elapsed = (entry.timestamp - started.timestamp).seconds
-                jobs.append(cls.Job(worker_id, name, result, started.timestamp, elapsed, started.body))
+                jobs.append((name, result, started.timestamp, elapsed, started.body))
 
         return jobs
 
@@ -144,7 +144,8 @@ class WorkersLog:
             if instance_id:
                 instances.append(self.Instance(worker_id, instance_id, seconds))
 
-            worker_jobs = self.get_jobs(log_entries, worker_id, command)
+            worker_jobs = [ self.Job(worker_id, *job_args) for 
+                            job_args in self.get_jobs(log_entries, command) ]
 
             for job in worker_jobs:
                 name = job.name
