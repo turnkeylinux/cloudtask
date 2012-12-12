@@ -18,11 +18,19 @@ from StringIO import StringIO
 from datetime import datetime
 
 def fmt_elapsed(seconds):
-    hours = seconds / 3600
-    minutes = (seconds % 3600) / 60
-    seconds = (seconds % 3600) % 60
+    units = {}
+    for unit, unit_seconds in (('days', 86400), ('hours', 3600), ('minutes', 60), ('seconds', 1)):
+        units[unit] = seconds / unit_seconds
+        seconds = seconds % unit_seconds
 
-    return "%02d:%02d:%02d" % (hours, minutes, seconds)
+
+    if units['days']:
+        formatted = "%d days " % units['days']
+    else:
+        formatted = ""
+
+    formatted += "%02d:%02d:%02d" % (units['hours'], units['minutes'], units['seconds'])
+    return formatted
 
 class Error(Exception):
     pass
