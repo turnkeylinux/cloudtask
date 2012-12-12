@@ -285,7 +285,6 @@ def logalyzer(session_path):
         completed = [ job for job in jobs if job.result == 'exit 0' ]
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
                   for job in completed ]
-        print stats.succeeded
         fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 
                                 groupby=lambda a: a[2])
         print >> sio, fmted_table
