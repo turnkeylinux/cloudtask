@@ -77,6 +77,15 @@ class WorkersLog:
         def __repr__(self):
             return "Job%s" % `self.worker_id, self.name, self.result, self.elapsed`
 
+    class Instance:
+        def __init__(self, worker_id, instance_id, seconds):
+            self.worker_id = worker_id
+            self.instance_id = instance_id
+            self.seconds = seconds
+
+        def __repr__(self):
+            return "Instance%s" % `self.worker_id, self.instance_id, self.seconds`
+
     @classmethod
     def get_jobs(cls, log_entries, worker_id, command):
         pat = re.compile(r'^(.*?) # %s (.*)' % command)
@@ -92,12 +101,49 @@ class WorkersLog:
 
         return jobs
 
+    @classmethod
+    def get_instance_elapsed(cls, log_entries):
+        launched = None
+        destroyed = None
+
+        for log_entry in log_entries:
+            m = re.match(r'launched worker (.*)', log_entry.title)
+            if m:
+                instanceid = m.group(1)
+                launched = (log_entry.timestamp, instanceid)
+                continue
+
+            m = re.match(r'destroyed worker (.*)', log_entry.title)
+            if m:
+                instanceid = m.group(1)
+                destroyed = (log_entry.timestamp, instanceid)
+
+        if not launched:
+            return None, None
+
+        if launched and destroyed:
+            if destroyed[1] != launched[1]:
+                destroyed = None
+
+        if launched and not destroyed:
+            instanceid = launched[1]
+            return instanceid, None
+
+        return launched[1], (destroyed[0] - launched[0]).seconds
+
     def __init__(self, dpath, command):
         jobs = {}
+        instances = []
+
         for fname in os.listdir(dpath):
             worker_id = int(fname)
             fpath = join(dpath, fname)
             log_entries = self.parse_worker_log(fpath)
+
+            instance_id, seconds = self.get_instance_elapsed(log_entries)
+            if instance_id:
+                instances.append(self.Instance(worker_id, instance_id, seconds))
+
             worker_jobs = self.get_jobs(log_entries, worker_id, command)
 
             for job in worker_jobs:
@@ -110,6 +156,7 @@ class WorkersLog:
                     jobs[name] = job
 
         self.jobs = jobs.values()
+        self.instances = instances
 
 def fmt_table(rows, title=[], groupby=None):
     col_widths = []
