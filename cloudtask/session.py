@@ -79,6 +79,17 @@ class Session(object):
                 else:
                     self.finished.append((command, state))
 
+        def save(self):
+            fh = file(self.path, "w")
+
+            for job, result in self.finished:
+                print >> fh, "%s\t%s" % (result, job)
+
+            for job in self.pending:
+                print >> fh, "PENDING\t%s" % job
+
+            fh.close()
+
         def update(self, jobs=[], results=[]):
             for job, result in results:
                 if result is None:
@@ -88,18 +99,20 @@ class Session(object):
 
                 self.finished.append((job, state))
 
-            states = self.finished[:]
-
             self.pending = list((set(self.pending) | set(jobs)) - \
                                  set([ job for job, result in results ]))
 
-            for job in self.pending:
-                states.append((job, "PENDING"))
+            self.save()
 
-            fh = file(self.path, "w")
-            for job, state in states:
-                print >> fh, "%s\t%s" % (state, job)
-            fh.close()
+        def update_retry_failed(self):
+            finished = set(self.finished)
+            failed = set([(job, result) for job, result in finished if result != 'EXIT=0'])
+            ok = finished - failed
+
+            self.finished = list(ok)
+            self.pending += [ job for job, result in failed ]
+
+            self.save()
 
     class WorkerLog(object):
         def fh(self):

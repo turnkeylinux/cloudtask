@@ -60,6 +60,9 @@ Usage:
     # resume session 1 while overriding timeout
     cloudtask --resume=1 --timeout=6
 
+    # retry failed jobs in session 2 while overriding the split
+    cloudtask --retry=2 --split=1
+
 
 """
 import os
@@ -101,6 +104,7 @@ class Task:
             print >> sys.stderr, "syntax: %s [ -opts ] [ extra args ]" % sys.argv[0]
 
         print >> sys.stderr, "syntax: %s [ -opts ] --resume=SESSION_ID" % sys.argv[0]
+        print >> sys.stderr, "syntax: %s [ -opts ] --retry=SESSION_ID" % sys.argv[0]
         if cls.DESCRIPTION:
             print >> sys.stderr, cls.DESCRIPTION.strip()
             print >> sys.stderr, "\n".join(__doc__.strip().splitlines()[1:])
@@ -149,6 +153,7 @@ class Task:
                                        'h', ['help', 
                                              'force',
                                              'resume=',
+                                             'retry=',
                                              'sessions='] +
                                             [ attr.replace('_', '-') + '=' 
                                               for attr in TaskConf.__all__ ])
@@ -156,6 +161,7 @@ class Task:
             usage(e)
 
         opt_resume = None
+        opt_retry = None
         opt_force = False
 
         if cls.SESSIONS:
@@ -177,6 +183,12 @@ class Task:
                 except ValueError:
                     error("--resume session id must be an integer")
 
+            elif opt == '--retry':
+                try:
+                    opt_retry = int(val)
+                except ValueError:
+                    error("--retry session id must be an integer")
+
             elif opt == '--sessions':
                 if not isdir(val):
                     error("--sessions path '%s' is not a directory" % val)
@@ -186,8 +198,15 @@ class Task:
             elif opt == '--force':
                 opt_force = True
 
+        if opt_resume and opt_retry:
+            error("--retry and --resume can't be used together, different modes")
+
         if opt_resume:
             session = Session(opt_sessions, id=opt_resume)
+            taskconf = session.taskconf
+        elif opt_retry:
+            session = Session(opt_sessions, id=opt_retry)
+            session.jobs.update_retry_failed()
             taskconf = session.taskconf
         else:
             session = None
@@ -254,7 +273,7 @@ class Task:
         else:
             reporter = None
 
-        if opt_resume:
+        if opt_resume or opt_retry:
             if args:
                 error("--resume incompatible with a command")
 
