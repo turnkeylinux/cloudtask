@@ -77,14 +77,15 @@ class WorkersLog:
         def __repr__(self):
             return "Job%s" % `self.worker_id, self.name, self.result, self.elapsed`
 
-    class Instance:
-        def __init__(self, worker_id, instance_id, seconds):
+    class Worker:
+        def __init__(self, worker_id, instance_id, seconds, jobs):
             self.worker_id = worker_id
             self.instance_id = instance_id
             self.seconds = seconds
+            self.jobs = jobs
 
         def __repr__(self):
-            return "Instance%s" % `self.worker_id, self.instance_id, self.seconds`
+            return "Worker%s" % `self.worker_id, self.instance_id, self.seconds, self.jobs`
 
     @classmethod
     def get_jobs(cls, log_entries, command):
@@ -133,16 +134,12 @@ class WorkersLog:
 
     def __init__(self, dpath, command):
         jobs = {}
-        instances = []
+        workers = []
 
         for fname in os.listdir(dpath):
             worker_id = int(fname)
             fpath = join(dpath, fname)
             log_entries = self.parse_worker_log(fpath)
-
-            instance_id, seconds = self.get_instance_elapsed(log_entries)
-            if instance_id:
-                instances.append(self.Instance(worker_id, instance_id, seconds))
 
             worker_jobs = [ self.Job(worker_id, *job_args) for 
                             job_args in self.get_jobs(log_entries, command) ]
@@ -156,8 +153,14 @@ class WorkersLog:
                 else:
                     jobs[name] = job
 
+            instance_id, seconds = self.get_instance_elapsed(log_entries)
+            if not instance_id:
+                seconds = (log_entries[-1].timestamp - log_entries[0].timestamp).seconds
+
+            workers.append(self.Worker(worker_id, instance_id, seconds, len(worker_jobs)))
+
         self.jobs = jobs.values()
-        self.instances = instances
+        self.workers = workers
 
 def fmt_table(rows, title=[], groupby=None):
     col_widths = []
