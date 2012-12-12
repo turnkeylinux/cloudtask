@@ -73,6 +73,7 @@ import getopt
 import signal
 import traceback
 import re
+import time
 
 from session import Session
 
@@ -336,7 +337,8 @@ class Task:
 
         session.taskconf = taskconf
 
-        print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        print >> session.mlog, "%s :: session %d (pid %d)\n" % (timestamp, session.id, os.getpid())
 
         class CaughtSignal(CloudWorker.Terminated):
             pass
@@ -386,8 +388,9 @@ class Task:
 
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        print >> session.mlog, "session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
-                (session.id, session.elapsed, 
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        print >> session.mlog, "\n%s :: session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
+                (timestamp, session.id, session.elapsed, 
                  total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded)
         
 

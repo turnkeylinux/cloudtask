@@ -132,7 +132,7 @@ def logalyzer(session_path):
     conf = eval(file(session_paths.conf).read())
     log = file(session_paths.log).read()
 
-    m = re.search(r'^session (\d+).*(\d+) seconds', log, re.MULTILINE)
+    m = re.search(r'session (\d+).*(\d+) seconds', log, re.MULTILINE)
     if not m:
         raise Error("couldn't find session summary")
 
