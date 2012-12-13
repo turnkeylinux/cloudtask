@@ -208,6 +208,8 @@ class Task:
         elif opt_retry:
             session = Session(opt_sessions, id=opt_retry)
             session.jobs.update_retry_failed()
+            if not session.jobs.pending:
+                error("no failed jobs to retry")
             taskconf = session.taskconf
         else:
             session = None
