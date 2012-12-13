@@ -17,6 +17,8 @@ import re
 from StringIO import StringIO
 from datetime import datetime
 
+import ec2cost
+
 def fmt_elapsed(seconds):
     units = {}
     for unit, unit_seconds in (('days', 86400), ('hours', 3600), ('minutes', 60), ('seconds', 1)):
@@ -78,14 +80,15 @@ class WorkersLog:
             return "Job%s" % `self.worker_id, self.name, self.result, self.elapsed`
 
     class Worker:
-        def __init__(self, worker_id, instance_id, seconds, jobs):
+        def __init__(self, worker_id, instance_id, jobs, instancetime, worktime):
             self.worker_id = worker_id
             self.instance_id = instance_id
-            self.seconds = seconds
             self.jobs = jobs
+            self.instancetime = instancetime
+            self.worktime = worktime
 
         def __repr__(self):
-            return "Worker%s" % `self.worker_id, self.instance_id, self.seconds, self.jobs`
+            return "Worker%s" % `self.worker_id, self.instance_id, self.jobs, self.instancetime, self.worktime`
 
     @classmethod
     def get_jobs(cls, log_entries, command):
@@ -97,13 +100,14 @@ class WorkersLog:
             if m:
                 result, name = m.groups()
                 started = log_entries[i-1]
-                elapsed = (entry.timestamp - started.timestamp).seconds
+                delta = (entry.timestamp - started.timestamp)
+                elapsed = delta.seconds + delta.days * 86400
                 jobs.append((name, result, started.timestamp, elapsed, started.body))
 
         return jobs
 
     @classmethod
-    def get_instance_elapsed(cls, log_entries):
+    def get_instance_time(cls, log_entries):
         launched = None
         destroyed = None
 
@@ -130,7 +134,8 @@ class WorkersLog:
             instanceid = launched[1]
             return instanceid, None
 
-        return launched[1], (destroyed[0] - launched[0]).seconds
+        delta = destroyed[0] - launched[0]
+        return launched[1], delta.seconds + delta.days * 86400
 
     def __init__(self, dpath, command):
         jobs = {}
@@ -153,11 +158,9 @@ class WorkersLog:
                 else:
                     jobs[name] = job
 
-            instance_id, seconds = self.get_instance_elapsed(log_entries)
-            if not instance_id:
-                seconds = (log_entries[-1].timestamp - log_entries[0].timestamp).seconds
-
-            workers.append(self.Worker(worker_id, instance_id, seconds, len(worker_jobs)))
+            instance_id, instancetime = self.get_instance_time(log_entries)
+            worktime = sum([ job.elapsed for job in worker_jobs ])
+            workers.append(self.Worker(worker_id, instance_id, len(worker_jobs), instancetime, worktime))
 
         self.jobs = jobs.values()
         self.workers = workers
@@ -222,6 +225,25 @@ def logalyzer(session_path):
     print >> sio, header(0, "session %d: %s elapsed, %d jobs - %d pending, %d failed, %d completed" % 
                             (id, fmt_elapsed(elapsed), stats.total, stats.pending, stats.failures, stats.succeeded))
 
+    wl = WorkersLog(session_paths.workers, conf['command'])
+
+    instance_hours = sum([ worker.instancetime/3600 + 1 
+                           for worker in wl.workers 
+                           if worker.instance_id and worker.instancetime ])
+
+    work_hours = sum([ worker.worktime
+                       for worker in wl.workers 
+                       if worker.instance_id and worker.instancetime and worker.worktime ])/3600 + 1
+
+    if instance_hours:
+        hourly_cost = ec2cost.costs.get(conf['ec2_region'], conf['ec2_size'], conf['ec2_type'])['hourly']
+
+        print >> sio, "Cost: $%.2f ($%.2f x %d instance hours)" % (instance_hours * hourly_cost, hourly_cost, instance_hours)
+
+        print >> sio, "Efficiency: %d%% (%d work hours vs %d instance hours)" % ((work_hours/float(instance_hours) * 100),
+                                                                                  work_hours, instance_hours)
+    print >> sio
+
     print >> sio, "Configuration:"
     print >> sio
 
@@ -239,8 +261,6 @@ def logalyzer(session_path):
             print >> sio, "    %-16s %s" % (field.replace('_', '-'), fields[field])
 
     print >> sio
-
-    wl = WorkersLog(session_paths.workers, conf['command'])
 
     if stats.pending:
         print >> sio, header(0, "%d pending jobs" % stats.pending)
