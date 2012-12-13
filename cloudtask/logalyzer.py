@@ -80,15 +80,15 @@ class WorkersLog:
             return "Job%s" % `self.worker_id, self.name, self.result, self.elapsed`
 
     class Worker:
-        def __init__(self, worker_id, instance_id, jobs, instancetime, worktime):
+        def __init__(self, worker_id, instanceid, jobs, instancetime, worktime):
             self.worker_id = worker_id
-            self.instance_id = instance_id
+            self.instanceid = instanceid
             self.jobs = jobs
             self.instancetime = instancetime
             self.worktime = worktime
 
         def __repr__(self):
-            return "Worker%s" % `self.worker_id, self.instance_id, self.jobs, self.instancetime, self.worktime`
+            return "Worker%s" % `self.worker_id, self.instanceid, self.jobs, self.instancetime, self.worktime`
 
     @classmethod
     def get_jobs(cls, log_entries, command):
@@ -158,9 +158,9 @@ class WorkersLog:
                 else:
                     jobs[name] = job
 
-            instance_id, instancetime = self.get_instance_time(log_entries)
+            instanceid, instancetime = self.get_instance_time(log_entries)
             worktime = sum([ job.elapsed for job in worker_jobs ])
-            workers.append(self.Worker(worker_id, instance_id, len(worker_jobs), instancetime, worktime))
+            workers.append(self.Worker(worker_id, instanceid, len(worker_jobs), instancetime, worktime))
 
         self.jobs = jobs.values()
         self.workers = workers
@@ -232,11 +232,11 @@ def logalyzer(session_path):
 
     instance_hours = sum([ worker.instancetime/3600 + 1 
                            for worker in wl.workers 
-                           if worker.instance_id and worker.instancetime ])
+                           if worker.instanceid and worker.instancetime ])
 
     work_hours = sum([ worker.worktime
                        for worker in wl.workers 
-                       if worker.instance_id and worker.instancetime and worker.worktime ])/3600 + 1
+                       if worker.instanceid and worker.instancetime and worker.worktime ])/3600 + 1
 
     if instance_hours:
         hourly_cost = ec2cost.costs.get(conf['ec2_region'], conf['ec2_size'], conf['ec2_type'])['hourly']
@@ -281,7 +281,7 @@ def logalyzer(session_path):
 
         row = [ worker.jobs, 
                fmt_elapsed(worker.instancetime) if worker.instancetime else '-', 
-               worker.instance_id if worker.instance_id else '-', 
+               worker.instanceid if worker.instanceid else '-', 
                worker_id ]
         rows.append(row)
 
