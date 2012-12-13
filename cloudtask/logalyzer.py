@@ -168,7 +168,7 @@ class WorkersLog:
 def fmt_table(rows, title=[], groupby=None):
     col_widths = []
     for col_index in range(len(rows[0])):
-        col = [ str(row[col_index]) for row in rows ]
+        col = [ str(row[col_index]) for row in rows + [title] ]
         col_width = max(map(len, col)) + 5
         col_widths.append(col_width)
 
@@ -245,7 +245,7 @@ def logalyzer(session_path):
 
         print >> sio, "Efficiency: %d%% (%d work hours vs %d instance hours)" % ((work_hours/float(instance_hours) * 100),
                                                                                   work_hours, instance_hours)
-    print >> sio
+        print >> sio
 
     print >> sio, "Configuration:"
     print >> sio
@@ -259,7 +259,7 @@ def logalyzer(session_path):
     fields = conf
     fields['workers'] = workers
 
-    for field in ('command', 'workers', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report', '', 'workers'):
+    for field in ('command', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report', '', 'workers'):
         if not field:
             print >> sio
         elif field in fields and fields[field]:
@@ -273,19 +273,20 @@ def logalyzer(session_path):
     rows = []
     for worker in workers:
         worker_id = worker.worker_id
-        if not worker.instancetime:
+        if worker.instanceid and not worker.instancetime:
             worker_id = "%d\t# NOT DESTROYED!" % worker_id
 
         def fN(v):
             return v if v is not None else '-'
 
         row = [ worker.jobs, 
+               fmt_elapsed(worker.worktime) if worker.worktime else '-',
                fmt_elapsed(worker.instancetime) if worker.instancetime else '-', 
                worker.instanceid if worker.instanceid else '-', 
                worker_id ]
         rows.append(row)
 
-    fmted_table = fmt_table(rows, ["JOBS", "LIFETIME", "INSTANCE", "WORKER"])
+    fmted_table = fmt_table(rows, ["JOBS", "WORKTIME", "LIFETIME", "INSTANCE", "WORKER"])
     print >> sio, indent(8, fmted_table) + "\n"
         
     if stats.pending:
