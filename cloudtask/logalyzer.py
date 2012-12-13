@@ -27,7 +27,7 @@ def fmt_elapsed(seconds):
 
 
     if units['days']:
-        formatted = "%d days " % units['days']
+        formatted = "%dd " % units['days']
     else:
         formatted = ""
 
@@ -184,9 +184,12 @@ def fmt_table(rows, title=[], groupby=None):
         if groupby and i and groupby(rows[i]) != groupby(rows[i-1]):
             print >> sio
 
-        print >> sio, row_fmt % row
+        print >> sio, row_fmt % tuple(row)
 
     return sio.getvalue()
+
+def indent(depth, buf):
+    return "\n".join([ " " * depth + line for line in buf.splitlines() ])
 
 def logalyzer(session_path):
     session_paths = Session.Paths(session_path)
@@ -256,12 +259,35 @@ def logalyzer(session_path):
     fields = conf
     fields['workers'] = workers
 
-    for field in ('command', 'workers', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report'):
-        if field in fields and fields[field]:
+    for field in ('command', 'workers', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report', '', 'workers'):
+        if not field:
+            print >> sio
+        elif field in fields and fields[field]:
             print >> sio, "    %-16s %s" % (field.replace('_', '-'), fields[field])
 
     print >> sio
 
+    workers = wl.workers[:]
+    workers.sort(lambda a,b: cmp(b.jobs, a.jobs))
+
+    rows = []
+    for worker in workers:
+        worker_id = worker.worker_id
+        if not worker.instancetime:
+            worker_id = "%d\t# NOT DESTROYED!" % worker_id
+
+        def fN(v):
+            return v if v is not None else '-'
+
+        row = [ worker.jobs, 
+               fmt_elapsed(worker.instancetime) if worker.instancetime else '-', 
+               worker.instance_id if worker.instance_id else '-', 
+               worker_id ]
+        rows.append(row)
+
+    fmted_table = fmt_table(rows, ["JOBS", "LIFETIME", "INSTANCE", "WORKER"])
+    print >> sio, indent(8, fmted_table) + "\n"
+        
     if stats.pending:
         print >> sio, header(0, "%d pending jobs" % stats.pending)
         print >> sio, " ".join([ job[len(conf['command']):].strip() for job in jobs.pending ])
@@ -289,9 +315,6 @@ def logalyzer(session_path):
 
         if not single_failure:
             print >> sio, header(1, "Last output")
-
-        def indent(depth, buf):
-            return "\n".join([ " " * depth + line for line in buf.splitlines() ])
 
         for i, fmted_row in enumerate(fmted_rows):
             if not single_failure:
