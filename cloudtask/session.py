@@ -147,6 +147,8 @@ class Session(object):
 
             if buf:
                 self.fh.write(buf)
+            else:
+                os.utime(self.path, None)
 
         def __getattr__(self, attr):
             return getattr(self.fh, attr)
