@@ -82,6 +82,7 @@ from command import fmt_argv
 
 from taskconf import TaskConf
 from reporter import Reporter
+from watchdog import Watchdog
 
 class Task:
 
@@ -352,6 +353,8 @@ class Task:
 
             raise CaughtSignal("caught %s termination signal" % sigs[sig], sig)
 
+        watchdog = Watchdog(session, taskconf)
+
         signal.signal(signal.SIGINT, terminate)
         signal.signal(signal.SIGTERM, terminate)
 
@@ -377,6 +380,9 @@ class Task:
                 results = executor.results
             else:
                 results = []
+
+        watchdog.terminate()
+        watchdog.join()
 
         session.jobs.update(jobs, results)
 
