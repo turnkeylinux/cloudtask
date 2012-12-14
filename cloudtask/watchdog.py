@@ -23,6 +23,35 @@ def get_ppid(pid):
                           for key,val in [  re.split(r':\t\s*', line) for line in status.splitlines() ]])
     return int(status_dict['ppid'])
 
+class SessionWatcher:
+    def __init__(self, session_pid, workers_path):
+        self.session_pid = session_pid
+        self.workers_path = workers_path
+
+    def get_active_workers(self):
+        """returns list of tuples (worker_id, worker_log_mtime)"""
+
+        if not isdir(self.workers_path):
+            return []
+
+        active_workers = []
+        for fname in os.listdir(self.workers_path):
+            fpath = join(self.workers_path, fname)
+            if not isfile(fpath):
+                continue
+
+            try:
+                worker_id = int(fname)
+            except ValueError:
+                continue
+
+            if not pid_exists(worker_id) or (self.session_pid not in (worker_id, get_ppid(worker_id))):
+                continue
+
+            mtime = os.stat(fpath).st_mtime
+            active_workers.append((worker_id, mtime))
+
+        return active_workers
 
 class Watchdog:
     SIGTERM_TIMEOUT = 300
@@ -41,30 +70,7 @@ class Watchdog:
         session_pid = os.getppid()
         workers_path = session.paths.workers
 
-        def get_active_workers():
-            """returns list of tuples (worker_id, worker_log_mtime)"""
-
-            if not isdir(workers_path):
-                return []
-
-            active_workers = []
-            for fname in os.listdir(workers_path):
-                fpath = join(workers_path, fname)
-                if not isfile(fpath):
-                    continue
-
-                try:
-                    worker_id = int(fname)
-                except ValueError:
-                    continue
-
-                if not pid_exists(worker_id) or get_ppid(worker_id) != session_pid:
-                    continue
-
-                mtime = os.stat(fpath).st_mtime
-                active_workers.append((worker_id, mtime))
-
-            return active_workers
+        watcher = SessionWatcher(session_pid, workers_path)
 
         def log(s):
             session.mlog.write("# watchdog: %s\n" % s)
@@ -72,20 +78,22 @@ class Watchdog:
         watchdog_timeout = taskconf.timeout * 2
         session_idle = 0
 
+        # wait while the session exists and is not idle
         while pid_exists(session_pid) and session_idle < watchdog_timeout:
             time.sleep(1)
 
-            mtimes = [ mtime for worker_id, mtime in get_active_workers() ]
+            mtimes = [ mtime for worker_id, mtime in watcher.get_active_workers() ]
             if not mtimes:
                 continue
 
             session_idle = time.time() - max(mtimes)
+            print "session_idle = %d" % session_idle
 
         if session_idle >= watchdog_timeout:
             log("session idle after %d seconds" % watchdog_timeout)
 
             # SIGTERM active workers
-            for worker_id, worker_mtime in get_active_workers():
+            for worker_id, worker_mtime in watcher.get_active_workers():
                 try:
                     log("kill -TERM %d" % worker_id)
                     os.kill(worker_id, signal.SIGTERM)
@@ -96,12 +104,12 @@ class Watchdog:
             started = time.time()
             while time.time() - started < cls.SIGTERM_TIMEOUT:
                 time.sleep(1)
-                active_workers = get_active_workers()
+                active_workers = watcher.get_active_workers()
                 if not active_workers:
                     break
 
             # no more Mr. Nice Guy: SIGKILL workers that are still alive
-            for worker_id, worker_mtime in get_active_workers():
+            for worker_id, worker_mtime in watcher.get_active_workers():
                 try:
                     log("kill -KILL %d" % worker_id)
                     os.kill(worker_id, signal.SIGKILL)
