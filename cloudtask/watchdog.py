@@ -72,27 +72,17 @@ class Watchdog:
     SIGTERM_TIMEOUT = 3
 
     @classmethod
-    def watchdog(cls, session, taskconf):
-
-        def terminate(s, t):
-            print "watchdog received termination signal"
-
-        #signal.signal(signal.SIGTERM, terminate)
-
-        print "watchdog pid: %d, ppid: %d" % (os.getpid(), os.getppid())
+    def watch(cls, workers_path, logfh, timeout):
 
         session_pid = os.getppid()
-        workers_path = session.paths.workers
-
         watcher = SessionWatcher(session_pid, workers_path)
 
         def log(s):
-            session.mlog.write("# watchdog: %s\n" % s)
+            logfh.write("# watchdog: %s\n" % s)
 
-        watchdog_timeout = taskconf.timeout * 2
-
-        idletime = 0
-        # wait while the session exists and is not idle
+        idletime = None
+        
+        # wait while the session exists and is not idle so long we consider it stuck
         while pid_exists(session_pid):
             time.sleep(1)
 
@@ -100,11 +90,12 @@ class Watchdog:
             if idletime is None:
                 continue
 
-            if idletime > watchdog_timeout:
+            if idletime > timeout:
                 break
 
-        if idletime and idletime > watchdog_timeout:
-            log("session idle after %d seconds" % watchdog_timeout)
+
+        if idletime and idletime > timeout:
+            log("session idle after %d seconds" % idletime)
 
             # SIGTERM active workers
             for worker in watcher.active_workers:
@@ -132,10 +123,30 @@ class Watchdog:
 
     @classmethod
     def run(cls, session, taskconf):
-        try:
-            cls.watchdog(session, taskconf)
-        except KeyboardInterrupt:
+        class Stopped(Exception):
             pass
+
+        # SIGTERM sent to us when parent process has finished
+        def stop(s, t):
+            raise Stopped
+        signal.signal(signal.SIGTERM, stop)
+
+        # we stop watching because the session ended or because it idled
+        workers_path = session.paths.workers
+        try:
+            cls.watch(session.paths.workers, session.mlog, taskconf.timeout * 2)
+
+        except KeyboardInterrupt:
+            return
+
+        except Stopped:
+            pass
+
+        cls.cleanup(session, taskconf)
+
+    @classmethod
+    def cleanup(cls, session, taskconf):
+        pass
 
     def __init__(self, session, taskconf):
         self.session = session
