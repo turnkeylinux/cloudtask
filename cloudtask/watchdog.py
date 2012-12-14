@@ -24,12 +24,17 @@ def get_ppid(pid):
     return int(status_dict['ppid'])
 
 class SessionWatcher:
+    class Worker:
+        def __init__(self, pid, mtime):
+            self.pid = pid
+            self.mtime = mtime
+
     def __init__(self, session_pid, workers_path):
         self.session_pid = session_pid
         self.workers_path = workers_path
 
     def get_active_workers(self):
-        """returns list of tuples (worker_id, worker_log_mtime)"""
+        """returns list of tuples (worker_pid, worker_log_mtime)"""
 
         if not isdir(self.workers_path):
             return []
@@ -41,15 +46,15 @@ class SessionWatcher:
                 continue
 
             try:
-                worker_id = int(fname)
+                worker_pid = int(fname)
             except ValueError:
                 continue
 
-            if not pid_exists(worker_id) or (self.session_pid not in (worker_id, get_ppid(worker_id))):
+            if not pid_exists(worker_pid) or (self.session_pid not in (worker_pid, get_ppid(worker_pid))):
                 continue
 
             mtime = os.stat(fpath).st_mtime
-            active_workers.append((worker_id, mtime))
+            active_workers.append(self.Worker(worker_pid, mtime))
 
         return active_workers
 
@@ -82,7 +87,7 @@ class Watchdog:
         while pid_exists(session_pid) and session_idle < watchdog_timeout:
             time.sleep(1)
 
-            mtimes = [ mtime for worker_id, mtime in watcher.get_active_workers() ]
+            mtimes = [ worker.mtime for worker in watcher.get_active_workers() ]
             if not mtimes:
                 continue
 
@@ -93,10 +98,10 @@ class Watchdog:
             log("session idle after %d seconds" % watchdog_timeout)
 
             # SIGTERM active workers
-            for worker_id, worker_mtime in watcher.get_active_workers():
+            for worker in watcher.get_active_workers():
                 try:
-                    log("kill -TERM %d" % worker_id)
-                    os.kill(worker_id, signal.SIGTERM)
+                    log("kill -TERM %d" % worker.pid)
+                    os.kill(worker.pid, signal.SIGTERM)
                 except:
                     traceback.print_exc(file=session.mlog)
 
@@ -109,10 +114,10 @@ class Watchdog:
                     break
 
             # no more Mr. Nice Guy: SIGKILL workers that are still alive
-            for worker_id, worker_mtime in watcher.get_active_workers():
+            for worker in watcher.get_active_workers():
                 try:
-                    log("kill -KILL %d" % worker_id)
-                    os.kill(worker_id, signal.SIGKILL)
+                    log("kill -KILL %d" % worker.pid)
+                    os.kill(worker.pid, signal.SIGKILL)
                 except:
                     traceback.print_exc(file=session.mlog)
 
