@@ -180,19 +180,27 @@ class Watchdog:
             wl = logalyzer.WorkersLog(self.path_workers, self.taskconf.command)
             for worker in wl.workers:
                 if worker.instanceid and not worker.instancetime:
-                    yield worker.instanceid
+                    yield worker
 
-        zombie_instances = list(get_zombie_instances())
-        if not zombie_instances:
+        zombie_workers = list(get_zombie_instances())
+        if not zombie_workers:
             return
 
-        zombie_instances.sort()
+        zombie_instances = [ worker.instanceid for worker in zombie_workers ]
         self.log("destroying zombie instances: " + " ".join(sorted(zombie_instances)))
         hub = Hub(self.taskconf.hub_apikey)
         retrier = Retrier(self.DESTROY_ERROR_TIMEOUT, self.DESTROY_ERROR_SLEEP, self.logfh)
-        destroyed = retrier(hub.destroy, *zombie_instances)
-        self.log("destroyed zombie instances: " + " ".join(sorted([ instanceid for ipaddress, instanceid in destroyed ])))
+        destroyed_instances = [ instanceid for ipaddress, instanceid in retrier(hub.destroy, *zombie_instances) ]
+        self.log("destroyed zombie instances: " + " ".join(sorted(destroyed_instances)))
 
+        # log destruction to the respective worker logs
+        for zombie_worker in zombie_workers:
+            if zombie_worker.instanceid not in destroyed_instances:
+                continue
+            worker_log = file("%s/%d" % (self.path_workers, zombie_worker.worker_id), "a")
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            print >> worker_log, "\n# %s [watchdog] destroyed worker %s" % (timestamp, zombie_worker.instanceid)
+            worker_log.close()
 
     def __init__(self, logfh, path_workers, taskconf):
         self.logfh = logfh
