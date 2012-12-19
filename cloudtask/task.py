@@ -415,7 +415,8 @@ class Task:
         status("(%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
                (session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded))
 
-        return (total - succeeded == 0)
+        ok = (total - succeeded == 0)
+        return ok
 
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:
