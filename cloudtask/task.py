@@ -66,7 +66,7 @@ Usage:
 
 """
 import os
-from os.path import *
+from os.path import isdir
 import sys
 import shlex
 import getopt
@@ -169,11 +169,11 @@ class Task:
         if cls.SESSIONS:
             opt_sessions = cls.SESSIONS
             if not opt_sessions.startswith('/'):
-                opt_sessions = join(dirname(sys.argv[0]), opt_sessions)
+                opt_sessions = os.path.join(dirname(sys.argv[0]), opt_sessions)
 
         else:
             opt_sessions = os.environ.get('CLOUDTASK_SESSIONS',
-                                          join(os.environ['HOME'], '.cloudtask'))
+                                          os.path.join(os.environ['HOME'], '.cloudtask'))
 
         for opt, val in opts:
             if opt in ('-h', '--help'):
@@ -340,6 +340,17 @@ class Task:
 
         session.taskconf = taskconf
 
+        ok = cls.work(jobs, split, session, taskconf)
+        
+        if reporter:
+            reporter.report(session)
+
+        if not ok:
+            sys.exit(1)
+
+    @classmethod
+    def work(cls, jobs, split, session, taskconf):
+
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         print >> session.mlog, "%s :: session %d (pid %d)\n" % (timestamp, session.id, os.getpid())
 
@@ -400,13 +411,8 @@ class Task:
         print >> session.mlog, "\n%s :: session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
                 (timestamp, session.id, session.elapsed, 
                  total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded)
-        
 
-        if reporter:
-            reporter.report(session)
-
-        if succeeded != total:
-            sys.exit(1)
+        return (total - succeeded == 0)
 
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:
