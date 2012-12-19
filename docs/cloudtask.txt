@@ -7,7 +7,7 @@ Parallel batch execution with auto-launched cloud servers
 ---------------------------------------------------------
 
 :Author: Liraz Siri <liraz@turnkeylinux.org>
-:Date:   2011-07-31
+:Date:   2012-12-19
 :Manual section: 8
 :Manual group: misc
 
@@ -17,6 +17,7 @@ SYNOPSIS
 cat jobs | cloudtask [ -opts ] [ command ]
 
 cloudtask [ -opts ] --resume=SESSION_ID
+cloudtask [ -opts ] --retry=SESSION_ID
 
 DESCRIPTION
 ===========
@@ -84,49 +85,52 @@ USAGE BASICS
     EOF
 
     $ cat jobs | cloudtask echo executed: 
-    About to launch 1 cloud server to execute the following task:
+    $ cat jobs | $ct echo executed:
+    About to launch 1 cloud server to execute 3 jobs (hello .. hello world):
 
       Parameter       Value
       ---------       -----
 
-      jobs            3 (hello .. hello world)
+      split           1
       command         echo executed:
-      hub-apikey      BXFAVBHUEVHMCDQ
+      hub-apikey      CQHKTKHN7N2ZR6A
       ec2-region      us-east-1
       ec2-size        m1.small
       ec2-type        s3
-      user            root
-      backup-id       -
-      workers         -
-      overlay         -
-      post            -
-      pre             -
-      timeout         -
-      report          -
+      user            liraz
+      timeout         3600
 
     Is this really what you want? [yes/no] yes
-    session 1 (pid 22749)
-    # 2011-08-11 03:51:08 [127.137.205.30] launched new worker
-    # 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello
+    2012-12-19 23:44:20 :: session 1 (pid 11438)
+
+    # booting instance i-2ef94c5b ...
+    127.124.183.115 (11438): launched worker i-2ef94c5b
+    127.124.183.115 (11438): echo executed: hello
     executed: hello
-    Connection to 127.137.205.30 closed.
-    # 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello
-
-    # 2011-08-11 03:51:09 [127.137.205.30] echo executed: world
+    Connection to 127.124.183.115 closed.
+    127.124.183.115 (11438): exit 0 # echo executed: hello
+    127.124.183.115 (11438): echo executed: world
     executed: world
-    Connection to 127.137.205.30 closed.
-    # 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: world
-
-    # 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello world
+    Connection to 127.124.183.115 closed.
+    127.124.183.115 (11438): exit 0 # echo executed: world
+    127.124.183.115 (11438): echo executed: hello world
     executed: hello world
-    Connection to 127.137.205.30 closed.
-    # 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello world
+    Connection to 127.124.183.115 closed.
+    127.124.183.115 (11438): exit 0 # echo executed: hello world
+    127.124.183.115 (11438): destroyed worker i-2ef94c5b
 
-    session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
-    # 2011-08-11 03:51:10 [127.137.205.30] destroyed worker
+    2012-12-19 23:44:24 :: session 1 (11 seconds): 0/3 !OK - 0 pending, 0 timeouts, 0 errors, 3 OK
 
 OPTIONS
 =======
+
+--resume=SESSION_ID
+  Instead of launching a new session, resume the pending jobs of a
+  previous session
+
+--retry=SESSION_ID
+  Instead of launching a new session, retry the failed jobs of a
+  previous session
 
 --force                 
   Don't ask for confirmation
@@ -134,8 +138,14 @@ OPTIONS
 --hub-apikey=APIKEY     
   Hub API KEY (required if launching workers)
 
---backup-id=ID
+--backup-id=BACKUP-ID
   TurnKey Backup ID to restore on launch
+
+--snapshot-id=SNAPSHOT-ID
+  Launch instance from a snapshot ID
+
+--ami-id=AMI-ID
+  Force launch a specific AMI ID (default is the latest core)
 
 --ec2-region=REGION     
   Region for instance launch (default: us-east-1)
@@ -144,8 +154,11 @@ OPTIONS
 
       us-east-1 (Virginia, USA)
       us-west-1 (California, USA)
+      us-west-2 (Oregon, USA)
       eu-west-1 (Ireland, Europe)
-      ap-southeast-1 (Singapore, Asia)
+      ap-southeast-1 (Singapore, South-East Asia)
+      ap-northeast-1 (Tokyo, North-East Asia)
+      sa-east-1 (Sao Paulo, South America)
 
 --ec2-size=SIZE         
   Instance launch size (default: m1.small)
@@ -164,6 +177,12 @@ OPTIONS
 
 --timeout=SECONDS      
   How many seconds to wait before giving up (default: 3600)
+
+--retries=NUM
+  How many times to retry a failed job (default: 0)
+
+--strikes=NUM
+  How many consecutive failures before we retire worker
 
 --user=USERNAME         
   Username to execute commands as (default: root)
@@ -246,6 +265,20 @@ FEATURES
   - In case of Hub API failure cloudtask will wait a few seconds and try
     again.
 
+  - A watchdog process adds a layer of failure handling redundancy by
+    monitoring session logs for workers that have frozen up and to clean
+    up instances which the workers failed to destroy for some reason. 
+    
+    A worker can only freeze up if their timeout logic has broken
+    somehow. In practice this can only happen due to an underlying
+    system failure (e.g., system ran out of memory)
+
+    In usual operation, launched instances are automatically destroyed
+    by workers at the end of their operation. This may fail due to
+    temporary cloud/network outages. In case of failure, the watchdog
+    will retry to destroy launched instances every 5 minutes for 3
+    hours.
+
 * Abort and resume capability: a task can be aborted at any time by
   pressing Ctrl-C, or sending the TERM signal to the main process.
   After all automatically launched server instances are destroyed, the
@@ -266,6 +299,11 @@ FEATURES
 
   3) `py`: execute an arbitrary snippet of Python code. The session and
      task configuration are accessible as local variables.
+
+* Session log analysis (AKA logalyzer): the default emailed report is a
+  digest compiled by analyzing the session logs. This shows a low-noise,
+  actionable summary of failed and successful jobs, workers, batch costs
+  and efficiencies, etc.
 
 EXAMPLE USAGE SCENARIO
 ======================
@@ -299,6 +337,7 @@ creates a pre-configured cloudtask template for it in $HOME/cloudtasks::
     $ cd $HOME/cloudtasks
 
     $ cat > refresh-iso << 'EOF'
+    #!/usr/bin/env python
     from cloudtask import Task
 
     class RefreshISO(Task):
@@ -317,33 +356,30 @@ creates a pre-configured cloudtask template for it in $HOME/cloudtasks::
     $ chmod +x ./refresh-iso
 
     $ cat $PATH_LIST_APPLIANCES | ./refresh-iso
-    About to launch 10 cloud servers to execute the following task:
+    About to launch 10 cloud servers to execute 101 jobs (appengine-go .. zurmo):
 
       Parameter       Value
       ---------       -----
 
-      jobs            40 (appengine .. zimbra)
+      split           10
       command         refresh-iso-security-updates
-      hub-apikey      5YGVPEMHJHU5EA
+      hub-apikey      CQHKTKHN7N2ZR6A
       ec2-region      us-east-1
       ec2-size        m1.small
       ec2-type        s3
-      user            root
+      user            liraz
       backup-id       123
-      workers         -
-      overlay         -
-      post            -
-      pre             -
-      timeout         -
-      report          mail: cloudtask@turnkeylinux.org liraz@turnkeylinux.org
+      timeout         3600
+      report          mail: cloudtask@example.com alon@example.com liraz@example.com
 
     Is this really what you want? [yes/no] yes
+    2012-12-19 23:57:25 :: session 3 (pid 13845)
 
-    session 11 (pid 29709)
-    88.178.132.231 (29721): launched new worker
-    88.214.141.175 (29722): launched new worker
-    88.15.179.7 (29724): launched new worker
-    88.229.38.128 (29723): launched new worker
+    # booting instance i-0c7acff6 ...   
+    # booting instance i-9e8bec5e ...   
+    127.150.56.219 (13859): launched worker i-0c7acff6
+    127.49.232.160 (13860): launched worker i-9e8bec5e
+    # booting instance i-49528c78 ...   
 
     ...
 
@@ -522,7 +558,6 @@ When the user executes a task, the following steps are performed:
 
         --report='py: import pprint; pprint.pprint(locals())'
       
-
 SEE ALSO
 ========
 

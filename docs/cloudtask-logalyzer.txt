@@ -1,0 +1,39 @@
+===================
+cloudtask-logalyzer
+===================
+
+--------------------
+Analyze session logs
+--------------------
+
+:Author: Liraz Siri <liraz@turnkeylinux.org>
+:Date:   2012-12-20
+:Manual section: 8
+:Manual group: misc
+
+SYNOPSIS
+========
+
+cloudtask-logalyzer path/to/session
+
+DESCRIPTION
+===========
+
+Analyze session logs and create a report
+
+Cloudtask uses logalyzer's underlying logic to compile the default e-mail
+report from the session logs. This command allows the user to run logalyzer to
+create the session report on demand.
+
+USAGE EXAMPLES
+==============
+
+::
+
+    # compile report for session 1
+    cloudtask-logalyzer ~/.cloudtask/1
+
+SEE ALSO
+========
+
+``cloudtask`` (8)

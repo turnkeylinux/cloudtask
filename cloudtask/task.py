@@ -19,6 +19,9 @@ Resolution order for options:
 3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
 
 Options:
+    --resume=        Resume pending jobs of a previously run session
+    --retry=         Retry failed jobs of a previously run session
+
     --force          Don't ask for confirmation
 
     --hub-apikey=    Hub API KEY (required if launching workers)
@@ -35,7 +38,7 @@ Options:
 
     --timeout=       How many seconds to wait for a job before failing (default: 3600)
     --retries=       How many times to retry a failed job (default: 0)
-    --strikes=       How many consecutive failures before we dismiss worker (default: 0 - disabled)
+    --strikes=       How many consecutive failures before we retire worker (default: 0 - disabled)
 
     --user=          Username to execute commands as (default: root)
     --pre=           Worker setup command
