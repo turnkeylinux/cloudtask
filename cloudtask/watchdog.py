@@ -154,6 +154,9 @@ class Watchdog:
         class Stopped(Exception):
             pass
 
+        # SIGINT should raise KeyboardInterrupt
+        signal.signal(signal.SIGINT, signal.default_int_handler)
+
         # SIGTERM sent to us when parent process has finished
         def stop(s, t):
             raise Stopped
