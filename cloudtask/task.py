@@ -351,8 +351,12 @@ class Task:
     @classmethod
     def work(cls, jobs, split, session, taskconf):
 
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-        print >> session.mlog, "%s :: session %d (pid %d)\n" % (timestamp, session.id, os.getpid())
+        def status(msg):
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            session.mlog.write("%s :: session %d %s\n" % (timestamp, session.id, msg))
+
+        status("(pid %d)" % os.getpid())
+        print >> session.mlog
 
         class CaughtSignal(CloudWorker.Terminated):
             pass
@@ -407,10 +411,9 @@ class Task:
 
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-        print >> session.mlog, "\n%s :: session %d (%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
-                (timestamp, session.id, session.elapsed, 
-                 total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded)
+        print >> session.mlog
+        status("(%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
+               (session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded))
 
         return (total - succeeded == 0)
 
