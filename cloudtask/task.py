@@ -338,9 +338,10 @@ class Task:
         if not session:
             session = Session(opt_sessions)
 
+        taskconf.split = split
         session.taskconf = taskconf
 
-        ok = cls.work(jobs, split, session, taskconf)
+        ok = cls.work(jobs, session, taskconf)
         
         if reporter:
             reporter.report(session)
@@ -349,7 +350,7 @@ class Task:
             sys.exit(1)
 
     @classmethod
-    def work(cls, jobs, split, session, taskconf):
+    def work(cls, jobs, session, taskconf):
 
         def status(msg):
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
@@ -378,7 +379,7 @@ class Task:
         work_started = time.time()
 
         try:
-            executor = CloudExecutor(split, session, taskconf)
+            executor = CloudExecutor(session, taskconf)
             for job in jobs:
                 executor(job)
 

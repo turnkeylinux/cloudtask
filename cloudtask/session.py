@@ -227,7 +227,7 @@ class Session(object):
             return self._wlog
 
         makedirs(self.paths.workers)
-        wlog = self.WorkerLog(self.paths.workers, False if self.taskconf.split else True) 
+        wlog = self.WorkerLog(self.paths.workers, False if self.taskconf.split and self.taskconf.split > 1 else True) 
 
         self._wlog = wlog
         return wlog

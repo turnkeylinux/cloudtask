@@ -303,8 +303,10 @@ class CloudExecutor:
     class Error(Exception):
         pass
 
-    def __init__(self, split, session, taskconf):
+    def __init__(self, session, taskconf):
         ipaddresses = taskconf.workers
+
+        split = taskconf.split
         if split == 1:
             split = False
 
