@@ -100,18 +100,14 @@ class Watchdog:
     DESTROY_ERROR_TIMEOUT = 3600*3
     DESTROY_ERROR_SLEEP = 300
 
-    @staticmethod
-    def log(fh, s):
-        fh.write("# watchdog: %s\n" % s)
+    def log(self, s):
+        self.logfh.write("# watchdog: %s\n" % s)
 
-    @classmethod
-    def watch(cls, workers_path, logfh, timeout):
+    def watch(self):
+        timeout = self.taskconf.timeout * 2
 
         session_pid = os.getppid()
-        watcher = SessionWatcher(session_pid, workers_path)
-
-        def log(s):
-            cls.log(logfh, s)
+        watcher = SessionWatcher(session_pid, self.path_workers)
 
         idletime = None
         
@@ -128,19 +124,19 @@ class Watchdog:
 
 
         if idletime and idletime > timeout:
-            log("session idle after %d seconds" % idletime)
+            self.log("session idle after %d seconds" % idletime)
 
             # SIGTERM active workers
             for worker in watcher.active_workers:
                 try:
-                    log("kill -TERM %d" % worker.pid)
+                    self.log("kill -TERM %d" % worker.pid)
                     os.kill(worker.pid, signal.SIGTERM)
                 except:
-                    traceback.print_exc(file=session.mlog)
+                    traceback.print_exc(file=self.logfh)
 
             # wait up to SIGTERM_TIMEOUT for them to terminate
             started = time.time()
-            while time.time() - started < cls.SIGTERM_TIMEOUT:
+            while time.time() - started < self.SIGTERM_TIMEOUT:
                 time.sleep(1)
                 active_workers = watcher.active_workers
                 if not active_workers:
@@ -149,13 +145,12 @@ class Watchdog:
             # no more Mr. Nice Guy: SIGKILL workers that are still alive
             for worker in watcher.active_workers:
                 try:
-                    log("kill -KILL %d" % worker.pid)
+                    self.log("kill -KILL %d" % worker.pid)
                     os.kill(worker.pid, signal.SIGKILL)
                 except:
-                    traceback.print_exc(file=session.mlog)
+                    traceback.print_exc(file=self.logfh)
 
-    @classmethod
-    def run(cls, session, taskconf):
+    def run(self):
         class Stopped(Exception):
             pass
 
@@ -164,10 +159,8 @@ class Watchdog:
             raise Stopped
         signal.signal(signal.SIGTERM, stop)
 
-        # we stop watching because the session ended or because it idled
-        workers_path = session.paths.workers
         try:
-            cls.watch(session.paths.workers, session.mlog, taskconf.timeout * 2)
+            self.watch()
 
         except KeyboardInterrupt:
             return
@@ -176,16 +169,12 @@ class Watchdog:
             pass
 
         signal.signal(signal.SIGTERM, signal.SIG_IGN)
-        cls.cleanup(session, taskconf)
+        self.cleanup()
 
-    @classmethod
-    def cleanup(cls, session, taskconf):
-
-        def log(s):
-            cls.log(session.mlog, s)
+    def cleanup(self):
 
         def get_zombie_instances():
-            wl = logalyzer.WorkersLog(session.paths.workers, taskconf.command)
+            wl = logalyzer.WorkersLog(self.path_workers, self.taskconf.command)
             for worker in wl.workers:
                 if worker.instanceid and not worker.instancetime:
                     yield worker.instanceid
@@ -195,18 +184,19 @@ class Watchdog:
             return
 
         zombie_instances.sort()
-        log("destroying zombie instances: " + " ".join(sorted(zombie_instances)))
-        hub = Hub(taskconf.hub_apikey)
-        retrier = Retrier(cls.DESTROY_ERROR_TIMEOUT, cls.DESTROY_ERROR_SLEEP, session.mlog)
+        self.log("destroying zombie instances: " + " ".join(sorted(zombie_instances)))
+        hub = Hub(self.taskconf.hub_apikey)
+        retrier = Retrier(self.DESTROY_ERROR_TIMEOUT, self.DESTROY_ERROR_SLEEP, self.logfh)
         destroyed = retrier(hub.destroy, *zombie_instances)
-        log("destroyed zombie instances: " + " ".join(sorted([ instanceid for ipaddress, instanceid in destroyed ])))
+        self.log("destroyed zombie instances: " + " ".join(sorted([ instanceid for ipaddress, instanceid in destroyed ])))
 
 
-    def __init__(self, session, taskconf):
-        self.session = session
+    def __init__(self, logfh, path_workers, taskconf):
+        self.logfh = logfh
+        self.path_workers = path_workers
         self.taskconf = taskconf
 
-        self.process = Process(target=self.run, args=(self.session, self.taskconf))
+        self.process = Process(target=self.run)
         self.process.start()
 
     def terminate(self):

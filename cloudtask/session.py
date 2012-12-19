@@ -15,12 +15,6 @@ import sys
 
 import paths
 import errno
-import time
-
-from temp import TempFile
-import uuid
-
-import executil
 
 from taskconf import TaskConf
 import pprint
@@ -33,24 +27,6 @@ def makedirs(path, mode=0750):
     except OSError, e:
         if e.errno != errno.EEXIST:
             raise
-
-class TempSessionKey(TempFile):
-    def __init__(self):
-        TempFile.__init__(self, prefix='key_')
-        os.remove(self.path)
-
-        self.uuid = uuid.uuid4()
-        executil.getoutput("ssh-keygen -N '' -f %s -C %s" % (self.path, self.uuid))
-
-    @property
-    def public(self):
-        return self.path + ".pub"
-
-    def __del__(self):
-        if os.getpid() == self.pid:
-            os.remove(self.public)
-
-        TempFile.__del__(self)
 
 class UNDEFINED:
     pass
@@ -114,56 +90,84 @@ class Session(object):
 
             self.save()
 
-    class WorkerLog(object):
-        def fh(self):
-            if not self._fh:
-                self._fh = file(join(self.path, str(os.getpid())), "a", 1)
+    class Logs:
+        class Worker(object):
+            def fh(self):
+                if not self._fh:
+                    self._fh = file(join(self.path, str(os.getpid())), "a", 1)
 
-            return self._fh
-        status = fh = property(fh)
+                return self._fh
+            status = fh = property(fh)
 
+            def __init__(self, path, tee=False):
+                self._fh = None
+                self.path = path
+                self.tee = tee
 
-        def __init__(self, path, tee=False):
-            self._fh = None
-            self.path = path
-            self.tee = tee
+            @staticmethod
+            def _filter(buf):
+                buf = re.sub(r'Connection to \S+ closed\.\r+\n', '', buf)
+                buf = re.sub(r'\r[^\r\n]+$', '', buf)
+                buf = re.sub(r'.*\r(?![\r\n])','', buf)
+                buf = re.sub(r'\r+\n', '\n', buf)
 
-        @staticmethod
-        def _filter(buf):
-            buf = re.sub(r'Connection to \S+ closed\.\r+\n', '', buf)
-            buf = re.sub(r'\r[^\r\n]+$', '', buf)
-            buf = re.sub(r'.*\r(?![\r\n])','', buf)
-            buf = re.sub(r'\r+\n', '\n', buf)
+                return buf
 
-            return buf
+            def write(self, buf):
+                if self.tee:
+                    sys.stdout.write(buf)
+                    sys.stdout.flush()
 
-        def write(self, buf):
-            if self.tee:
+                # filter progress bars and other return-carriage crap
+                buf = self._filter(buf)
+
+                if buf:
+                    self.fh.write(buf)
+                else:
+                    os.utime(self.path, None)
+
+            def __getattr__(self, attr):
+                return getattr(self.fh, attr)
+
+        class Manager:
+            def __init__(self, path):
+                self.fh = file(path, "a", 1)
+
+            def write(self, buf):
+                self.fh.write(buf)
                 sys.stdout.write(buf)
                 sys.stdout.flush()
 
-            # filter progress bars and other return-carriage crap
-            buf = self._filter(buf)
+            def __getattr__(self, attr):
+                return getattr(self.fh, attr)
 
-            if buf:
-                self.fh.write(buf)
-            else:
-                os.utime(self.path, None)
+        def __init__(self, path_session_log, path_workers):
+            self.pid = os.getpid()
+            self.path_session_log = path_session_log
+            self.path_workers = path_workers
 
-        def __getattr__(self, attr):
-            return getattr(self.fh, attr)
+            self._worker = None
+            self._manager = None
 
-    class ManagerLog:
-        def __init__(self, path):
-            self.fh = file(path, "a", 1)
+        @property
+        def worker(self):
+            if self._worker:
+                return self._worker
 
-        def write(self, buf):
-            self.fh.write(buf)
-            sys.stdout.write(buf)
-            sys.stdout.flush()
+            makedirs(self.path_workers)
 
-        def __getattr__(self, attr):
-            return getattr(self.fh, attr)
+            worker = self.Worker(self.path_workers, True if os.getpid() == self.pid else False)
+            self._worker = worker
+            return worker
+
+        @property
+        def manager(self):
+            if self._manager:
+                return self._manager
+
+            manager = self.Manager(self.path_session_log)
+            self._manager = manager
+            return manager
 
     @staticmethod
     def new_session_id(sessions_path):
@@ -203,11 +207,7 @@ class Session(object):
         self.paths = Session.Paths(path)
         self.jobs = self.Jobs(self.paths.jobs)
 
-        self._wlog = None
-        self._mlog = None
-
-        self.key = TempSessionKey()
-
+        self.logs = self.Logs(self.paths.log, self.paths.workers)
         self.id = id
 
     def taskconf(self, val=UNDEFINED):
@@ -221,23 +221,3 @@ class Session(object):
             print >> file(path, "w"), pprint.pformat(d)
     taskconf = property(taskconf, taskconf)
 
-    @property
-    def wlog(self):
-        if self._wlog:
-            return self._wlog
-
-        makedirs(self.paths.workers)
-        wlog = self.WorkerLog(self.paths.workers, False if self.taskconf.split and self.taskconf.split > 1 else True) 
-
-        self._wlog = wlog
-        return wlog
-
-    @property
-    def mlog(self):
-        if self._mlog:
-            return self._mlog
-
-        mlog = self.ManagerLog(self.paths.log) 
-
-        self._mlog = mlog
-        return mlog

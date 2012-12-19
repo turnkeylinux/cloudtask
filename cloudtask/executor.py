@@ -68,7 +68,7 @@ class CloudWorker:
 
         return func
 
-    def __init__(self, session, taskconf, ipaddress=None, destroy=None, event_stop=None, launchq=None):
+    def __init__(self, session_logs, taskconf, sshkey, ipaddress=None, destroy=None, event_stop=None, launchq=None):
 
         self.pid = os.getpid()
 
@@ -77,9 +77,8 @@ class CloudWorker:
 
         self.event_stop = event_stop
 
-        self.wlog = session.wlog
-        self.mlog = session.mlog
-        self.session_key = session.key
+        self.logs = session_logs
+        self.sshkey = sshkey
 
         self.strikes = taskconf.strikes
         self.strike = 0
@@ -121,7 +120,7 @@ class CloudWorker:
                     def callback():
                         return not stopped.value
 
-                    instance = list(self.hub.launch(1, VerboseLog(session.mlog), callback, **taskconf.ec2_opts))[0]
+                    instance = list(self.hub.launch(1, VerboseLog(session_logs.manager), callback, **taskconf.ec2_opts))[0]
 
             if not instance or (event_stop and event_stop.is_set()):
                 raise self.Terminated
@@ -137,17 +136,17 @@ class CloudWorker:
 
         try:
             self.ssh = SSH(self.ipaddress, 
-                           identity_file=self.session_key.path, 
+                           identity_file=self.sshkey.path, 
                            login_name=taskconf.user,
                            callback=self.handle_stop)
         except SSH.Error, e:
             self.status("unreachable via ssh: " + str(e))
-            traceback.print_exc(file=self.wlog)
+            traceback.print_exc(file=self.logs.worker)
 
             raise self.Error(e)
 
         try:
-            self.ssh.copy_id(self.session_key.public)
+            self.ssh.copy_id(self.sshkey.public)
 
             if taskconf.overlay:
                 self.ssh.apply_overlay(taskconf.overlay)
@@ -157,7 +156,7 @@ class CloudWorker:
 
         except Exception, e:
             self.status("setup failed")
-            traceback.print_exc(file=self.wlog)
+            traceback.print_exc(file=self.logs.worker)
 
             raise self.Error(e)
 
@@ -168,7 +167,7 @@ class CloudWorker:
                 if self.cleanup_command:
                     self.ssh.command(self.cleanup_command).close()
 
-                self.ssh.remove_id(self.session_key.public)
+                self.ssh.remove_id(self.sshkey.public)
             except:
                 pass
 
@@ -185,7 +184,7 @@ class CloudWorker:
                     raise self.Error("Hub didn't destroy worker instance as requested!")
             except:
                 self.status("failed to destroy worker %s" % self.instanceid)
-                traceback.print_exc(file=self.wlog)
+                traceback.print_exc(file=self.logs.worker)
                 raise
 
     def __getstate__(self):
@@ -198,8 +197,8 @@ class CloudWorker:
         timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
 
         c = "\n" if after_output else ""
-        self.wlog.status.write(c + "# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
-        self.mlog.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
+        self.logs.worker.status.write(c + "# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
+        self.logs.manager.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
 
     def __call__(self, job):
         command = job.command
@@ -222,7 +221,7 @@ class CloudWorker:
         def handler(ssh_command, buf):
             if buf:
                 read_timeout.reset()
-                self.wlog.write(buf)
+                self.logs.worker.write(buf)
 
             if ssh_command.running and timeout.expired():
                 raise CommandTimeout
@@ -261,7 +260,7 @@ class CloudWorker:
         else:
             if ssh_command.exitcode == 255 and re.match(r'^ssh: connect to host.*:.*$', ssh_command.output):
                 self.status("worker unreachable # %s" % command)
-                self.wlog.write("%s\n" % ssh_command.output)
+                self.logs.worker.write("%s\n" % ssh_command.output)
                 raise self.Error(SSH.Error(ssh_command.output))
 
             self.status("exit %d # %s" % (ssh_command.exitcode, command), True)
@@ -303,7 +302,7 @@ class CloudExecutor:
     class Error(Exception):
         pass
 
-    def __init__(self, session, taskconf):
+    def __init__(self, session_logs, taskconf, sshkey):
         ipaddresses = taskconf.workers
 
         split = taskconf.split
@@ -315,7 +314,7 @@ class CloudExecutor:
                 ipaddress = ipaddresses[0]
             else:
                 ipaddress = None
-            self._execute = CloudWorker(session, taskconf, ipaddress)
+            self._execute = CloudWorker(session_logs, taskconf, sshkey, ipaddress)
             self.results = []
 
         else:
@@ -340,7 +339,7 @@ class CloudExecutor:
                     hub = Hub(taskconf.hub_apikey)
                     i = None
                     try:
-                        for i, instance in enumerate(hub.launch(new_workers, VerboseLog(session.mlog), callback, **taskconf.ec2_opts)):
+                        for i, instance in enumerate(hub.launch(new_workers, VerboseLog(session_logs.manager), callback, **taskconf.ec2_opts)):
                             launchq.put(instance)
                     except Exception, e:
                         unlaunched_workers = new_workers - (i + 1) \
@@ -351,7 +350,7 @@ class CloudExecutor:
                             launchq.put(None)
 
                         if not isinstance(e, hub.Stopped):
-                            traceback.print_exc(file=session.mlog)
+                            traceback.print_exc(file=session_logs.manager)
 
                 threading.Thread(target=thread).start()
 
@@ -361,7 +360,7 @@ class CloudExecutor:
                 else:
                     ipaddress = None
 
-                worker = Deferred(CloudWorker, session, taskconf, ipaddress, 
+                worker = Deferred(CloudWorker, session_logs, taskconf, sshkey, ipaddress, 
                                   event_stop=self.event_stop, launchq=launchq)
 
                 workers.append(worker)

@@ -66,7 +66,7 @@ Usage:
 
 """
 import os
-from os.path import isdir
+from os.path import *
 import sys
 import shlex
 import getopt
@@ -83,6 +83,28 @@ from command import fmt_argv
 from taskconf import TaskConf
 from reporter import Reporter
 from watchdog import Watchdog
+
+from temp import TempFile
+import executil
+import uuid
+
+class TempSSHKey(TempFile):
+    def __init__(self):
+        TempFile.__init__(self, prefix='key_')
+        os.remove(self.path)
+
+        self.uuid = uuid.uuid4()
+        executil.getoutput("ssh-keygen -N '' -f %s -C %s" % (self.path, self.uuid))
+
+    @property
+    def public(self):
+        return self.path + ".pub"
+
+    def __del__(self):
+        if os.getpid() == self.pid:
+            os.remove(self.public)
+
+        TempFile.__del__(self)
 
 class Task:
 
@@ -169,11 +191,11 @@ class Task:
         if cls.SESSIONS:
             opt_sessions = cls.SESSIONS
             if not opt_sessions.startswith('/'):
-                opt_sessions = os.path.join(dirname(sys.argv[0]), opt_sessions)
+                opt_sessions = join(dirname(sys.argv[0]), opt_sessions)
 
         else:
             opt_sessions = os.environ.get('CLOUDTASK_SESSIONS',
-                                          os.path.join(os.environ['HOME'], '.cloudtask'))
+                                          join(os.environ['HOME'], '.cloudtask'))
 
         for opt, val in opts:
             if opt in ('-h', '--help'):
@@ -287,7 +309,7 @@ class Task:
                 print "session %d finished" % session.id
                 sys.exit(0)
             else:
-                print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
+                print >> session.logs.manager, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
 
         else:
             if cls.COMMAND:
@@ -354,10 +376,10 @@ class Task:
 
         def status(msg):
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            session.mlog.write("%s :: session %d %s\n" % (timestamp, session.id, msg))
+            session.logs.manager.write("%s :: session %d %s\n" % (timestamp, session.id, msg))
 
         status("(pid %d)" % os.getpid())
-        print >> session.mlog
+        print >> session.logs.manager
 
         class CaughtSignal(CloudWorker.Terminated):
             pass
@@ -369,7 +391,7 @@ class Task:
 
             raise CaughtSignal("caught %s termination signal" % sigs[sig], sig)
 
-        watchdog = Watchdog(session, taskconf)
+        watchdog = Watchdog(session.logs.manager, session.paths.workers, taskconf)
 
         signal.signal(signal.SIGINT, terminate)
         signal.signal(signal.SIGTERM, terminate)
@@ -377,9 +399,10 @@ class Task:
         executor = None
 
         work_started = time.time()
+        sshkey = TempSSHKey()
 
         try:
-            executor = CloudExecutor(session, taskconf)
+            executor = CloudExecutor(session.logs, taskconf, sshkey)
             for job in jobs:
                 executor(job)
 
@@ -388,10 +411,10 @@ class Task:
 
         except Exception, e:
             if isinstance(e, CaughtSignal):
-                print >> session.mlog,  "# " + str(e[0])
+                print >> session.logs.manager,  "# " + str(e[0])
 
             elif not isinstance(e, (CloudWorker.Error, CloudWorker.Terminated)):
-                traceback.print_exc(file=session.mlog)
+                traceback.print_exc(file=session.logs.manager)
 
             if executor:
                 executor.stop()
@@ -414,7 +437,7 @@ class Task:
 
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
-        print >> session.mlog
+        print >> session.logs.manager
 
         status("(%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
                (time.time() - work_started, total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded))

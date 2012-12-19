@@ -121,8 +121,8 @@ class MailHandler:
             print >> sio, header("Fallback session log", "=")
             print >> sio, taskconf.fmt()
 
-            mlog = file(session.paths.log).read()
-            print >> sio, mlog
+            manager_log = file(session.paths.log).read()
+            print >> sio, manager_log
 
             body = sio.getvalue()
 
