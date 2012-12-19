@@ -375,6 +375,8 @@ class Task:
 
         executor = None
 
+        work_started = time.time()
+
         try:
             executor = CloudExecutor(split, session, taskconf)
             for job in jobs:
@@ -412,8 +414,9 @@ class Task:
         total = len(session.jobs.finished) + len(session.jobs.pending)
 
         print >> session.mlog
+
         status("(%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
-               (session.elapsed, total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded))
+               (time.time() - work_started, total - succeeded, total, len(session.jobs.pending), timeouts, errors, succeeded))
 
         ok = (total - succeeded == 0)
         return ok

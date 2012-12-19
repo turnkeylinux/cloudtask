@@ -206,7 +206,6 @@ class Session(object):
         self._wlog = None
         self._mlog = None
 
-        self.started = time.time()
         self.key = TempSessionKey()
 
         self.id = id
@@ -221,10 +220,6 @@ class Session(object):
             del d['hub_apikey']
             print >> file(path, "w"), pprint.pformat(d)
     taskconf = property(taskconf, taskconf)
-
-    @property
-    def elapsed(self):
-        return time.time() - self.started 
 
     @property
     def wlog(self):
