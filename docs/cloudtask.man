@@ -1,6 +1,6 @@
 .\" Man page generated from reStructeredText.
 .
-.TH CLOUDTASK 8 "2011-07-31" "" "misc"
+.TH CLOUDTASK 8 "2012-12-19" "" "misc"
 .SH NAME
 CloudTask \- Parallel batch execution with auto-launched cloud servers
 .
@@ -35,6 +35,7 @@ level margin: \\n[rst2man-indent\\n[rst2man-indent-level]]
 cat jobs | cloudtask [ \-opts ] [ command ]
 .sp
 cloudtask [ \-opts ] \-\-resume=SESSION_ID
+cloudtask [ \-opts ] \-\-retry=SESSION_ID
 .SH DESCRIPTION
 .sp
 Remotely execute in parallel a batch of commands over SSH while either
@@ -103,62 +104,83 @@ hello world
 EOF
 
 $ cat jobs | cloudtask echo executed:
-About to launch 1 cloud server to execute the following task:
+$ cat jobs | $ct echo executed:
+About to launch 1 cloud server to execute 3 jobs (hello .. hello world):
 
   Parameter       Value
   \-\-\-\-\-\-\-\-\-       \-\-\-\-\-
 
-  jobs            3 (hello .. hello world)
+  split           1
   command         echo executed:
-  hub\-apikey      BXFAVBHUEVHMCDQ
+  hub\-apikey      CQHKTKHN7N2ZR6A
   ec2\-region      us\-east\-1
   ec2\-size        m1.small
   ec2\-type        s3
-  user            root
-  backup\-id       \-
-  workers         \-
-  overlay         \-
-  post            \-
-  pre             \-
-  timeout         \-
-  report          \-
+  user            liraz
+  timeout         3600
 
 Is this really what you want? [yes/no] yes
-session 1 (pid 22749)
-# 2011\-08\-11 03:51:08 [127.137.205.30] launched new worker
-# 2011\-08\-11 03:51:09 [127.137.205.30] echo executed: hello
+2012\-12\-19 23:44:20 :: session 1 (pid 11438)
+
+# booting instance i\-2ef94c5b ...
+127.124.183.115 (11438): launched worker i\-2ef94c5b
+127.124.183.115 (11438): echo executed: hello
 executed: hello
-Connection to 127.137.205.30 closed.
-# 2011\-08\-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello
-
-# 2011\-08\-11 03:51:09 [127.137.205.30] echo executed: world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: hello
+127.124.183.115 (11438): echo executed: world
 executed: world
-Connection to 127.137.205.30 closed.
-# 2011\-08\-11 03:51:09 [127.137.205.30] exit 0 # echo executed: world
-
-# 2011\-08\-11 03:51:09 [127.137.205.30] echo executed: hello world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: world
+127.124.183.115 (11438): echo executed: hello world
 executed: hello world
-Connection to 127.137.205.30 closed.
-# 2011\-08\-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: hello world
+127.124.183.115 (11438): destroyed worker i\-2ef94c5b
 
-session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
-# 2011\-08\-11 03:51:10 [127.137.205.30] destroyed worker
+2012\-12\-19 23:44:24 :: session 1 (11 seconds): 0/3 !OK \- 0 pending, 0 timeouts, 0 errors, 3 OK
 .ft P
 .fi
 .SH OPTIONS
 .INDENT 0.0
 .TP
+.BI \-\-resume\fB= SESSION_ID
+.
+Instead of launching a new session, resume the pending jobs of a
+previous session
+.TP
+.BI \-\-retry\fB= SESSION_ID
+.
+Instead of launching a new session, retry the failed jobs of a
+previous session
+.TP
 .B \-\-force
 .
 Don\(aqt ask for confirmation
+.UNINDENT
+.INDENT 0.0
+.TP
+.B \-\-ssh\-identity=
+.
+SSH identity keyfile to use (defaults to ~/.ssh/identity)
+.UNINDENT
+.INDENT 0.0
 .TP
 .BI \-\-hub\-apikey\fB= APIKEY
 .
 Hub API KEY (required if launching workers)
 .TP
-.BI \-\-backup\-id\fB= ID
+.BI \-\-backup\-id\fB= BACKUP\-ID
 .
 TurnKey Backup ID to restore on launch
+.TP
+.BI \-\-snapshot\-id\fB= SNAPSHOT\-ID
+.
+Launch instance from a snapshot ID
+.TP
+.BI \-\-ami\-id\fB= AMI\-ID
+.
+Force launch a specific AMI ID (default is the latest core)
 .TP
 .BI \-\-ec2\-region\fB= REGION
 .
@@ -170,8 +192,11 @@ Regions:
 .ft C
 us\-east\-1 (Virginia, USA)
 us\-west\-1 (California, USA)
+us\-west\-2 (Oregon, USA)
 eu\-west\-1 (Ireland, Europe)
-ap\-southeast\-1 (Singapore, Asia)
+ap\-southeast\-1 (Singapore, South\-East Asia)
+ap\-northeast\-1 (Tokyo, North\-East Asia)
+sa\-east\-1 (Sao Paulo, South America)
 .ft P
 .fi
 .TP
@@ -200,6 +225,14 @@ Path where sessions are stored (default: $HOME/.cloudtask)
 .BI \-\-timeout\fB= SECONDS
 .
 How many seconds to wait before giving up (default: 3600)
+.TP
+.BI \-\-retries\fB= NUM
+.
+How many times to retry a failed job (default: 0)
+.TP
+.BI \-\-strikes\fB= NUM
+.
+How many consecutive failures before we retire worker
 .TP
 .BI \-\-user\fB= USERNAME
 .
@@ -313,6 +346,21 @@ worker indefinitely.
 .
 In case of Hub API failure cloudtask will wait a few seconds and try
 again.
+.IP \(bu 2
+.
+A watchdog process adds a layer of failure handling redundancy by
+monitoring session logs for workers that have frozen up and to clean
+up instances which the workers failed to destroy for some reason.
+.sp
+A worker can only freeze up if their timeout logic has broken
+somehow. In practice this can only happen due to an underlying
+system failure (e.g., system ran out of memory)
+.sp
+In usual operation, launched instances are automatically destroyed
+by workers at the end of their operation. This may fail due to
+temporary cloud/network outages. In case of failure, the watchdog
+will retry to destroy launched instances every 5 minutes for 3
+hours.
 .UNINDENT
 .IP \(bu 2
 .
@@ -342,6 +390,12 @@ session context.
 \fIpy\fP: execute an arbitrary snippet of Python code. The session and
 task configuration are accessible as local variables.
 .UNINDENT
+.IP \(bu 2
+.
+Session log analysis (AKA logalyzer): the default emailed report is a
+digest compiled by analyzing the session logs. This shows a low\-noise,
+actionable summary of failed and successful jobs, workers, batch costs
+and efficiencies, etc.
 .UNINDENT
 .SH EXAMPLE USAGE SCENARIO
 .sp
@@ -380,6 +434,7 @@ $ mkdir $HOME/cloudtasks
 $ cd $HOME/cloudtasks
 
 $ cat > refresh\-iso << \(aqEOF\(aq
+#!/usr/bin/env python
 from cloudtask import Task
 
 class RefreshISO(Task):
@@ -398,33 +453,30 @@ EOF
 $ chmod +x ./refresh\-iso
 
 $ cat $PATH_LIST_APPLIANCES | ./refresh\-iso
-About to launch 10 cloud servers to execute the following task:
+About to launch 10 cloud servers to execute 101 jobs (appengine\-go .. zurmo):
 
   Parameter       Value
   \-\-\-\-\-\-\-\-\-       \-\-\-\-\-
 
-  jobs            40 (appengine .. zimbra)
+  split           10
   command         refresh\-iso\-security\-updates
-  hub\-apikey      5YGVPEMHJHU5EA
+  hub\-apikey      CQHKTKHN7N2ZR6A
   ec2\-region      us\-east\-1
   ec2\-size        m1.small
   ec2\-type        s3
-  user            root
+  user            liraz
   backup\-id       123
-  workers         \-
-  overlay         \-
-  post            \-
-  pre             \-
-  timeout         \-
-  report          mail: cloudtask@turnkeylinux.org liraz@turnkeylinux.org
+  timeout         3600
+  report          mail: cloudtask@example.com alon@example.com liraz@example.com
 
 Is this really what you want? [yes/no] yes
+2012\-12\-19 23:57:25 :: session 3 (pid 13845)
 
-session 11 (pid 29709)
-88.178.132.231 (29721): launched new worker
-88.214.141.175 (29722): launched new worker
-88.15.179.7 (29724): launched new worker
-88.229.38.128 (29723): launched new worker
+# booting instance i\-0c7acff6 ...
+# booting instance i\-9e8bec5e ...
+127.150.56.219 (13859): launched worker i\-0c7acff6
+127.49.232.160 (13860): launched worker i\-9e8bec5e
+# booting instance i\-49528c78 ...
 
 \&...
 .ft P
@@ -557,6 +609,71 @@ EOF
 chmod +x helloworld
 .ft P
 .fi
+.SH SSH AUTHENTICATION
+.sp
+Cloudtask uses SSH to log into remote workers, transfer files and
+execute commands. You can\(aqt SSH into a remote worker unless
+authentication has been properly set up. The local ssh client must be
+capable of authenticating to the remote worker with its ssh identity.
+Password authentication is not supported. Your ssh identity must be
+added to the remote worker\(aqs authorized keys list.
+.sp
+The easiest and most reliable way to do this is to:
+.INDENT 0.0
+.IP 1. 3
+.
+Generate an SSH keypair:
+.sp
+.nf
+.ft C
+$ ssh\-keygen \-f cloudtask\-keypair \-N \(aq\(aq
+Generating public/private rsa key pair.
+Your identification has been saved in cloudtask\-keypair.
+Your public key has been saved in cloudtask\-keypair.pub.
+The key fingerprint is:
+c5:88:16:8e:78:a9:b9:b9:c1:c3:5d:87:e5:03:8d:3c liraz@backstage
+The key\(aqs randomart image is:
++\-\-[ RSA 2048]\-\-\-\-+
+|      .          |
+|   . = = o       |
+|  . + E + o      |
+|   + . * .       |
+|  o   o S        |
+| o + . . .       |
+|  B .            |
+|   +             |
+|  .              |
++\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-\-+
+.ft P
+.fi
+.IP 2. 3
+.
+Log into your Hub account, go to the User Profile page and cut and
+paste the contents of cloudtask\-keypair.pub to the Authorized Keys
+textbox. This ensures that cloudtask\-keypair will be added to the
+list of authorized keys on newly launched instances.
+.UNINDENT
+.sp
+If you are running Cloudtask on a remote machine and don\(aqt want to leave
+your authorized key on it, there is a somewhat safer, though less
+reliable alternative. You can keep your authorized key on your local
+machine and forward your SSH agent to the remote machine running
+Cloudtask:
+.sp
+.nf
+.ft C
+ssh \-A my\-cloudtask\-controller
+.ft P
+.fi
+.sp
+Then when you run Cloudtask, as soon as it launches a new instance it
+will use your forwarded identity to add a temporary identity to the list
+of authorized keys on the newly launched remote instance. This will
+allow Cloudtask to continue to access the worker even if you log out and
+cut off access to the forwarded SSH agent.
+.sp
+You\(aqll need to make sure you stay logged on with the forwarded SSH agent
+until the last worker launches and authorizes the temporary identity.
 .SH HOW IT WORKS
 .sp
 When the user executes a task, the following steps are performed:

@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -17,7 +17,10 @@ import shlex
 from email.Message import Message
 from command import Command
 
-import StringIO
+import traceback
+from StringIO import StringIO
+
+import logalyzer
 
 class Error(Exception):
     pass
@@ -94,42 +97,38 @@ class MailHandler:
         self.recipients = args[1:]
         self.sendmail = self.Sendmail()
 
-    @staticmethod
-    def fmt_taskconf(taskconf):
-        sio = StringIO.StringIO()
-
-        table = []
-        for attr in ('split', 'command',
-                     'ec2-region', 'ec2-size', 'ec2-type',
-                     'user', 'backup-id', 'ami-id', 'workers',
-                     'overlay', 'post', 'pre', 'timeout', 'report'):
-
-            val = taskconf[attr.replace('-', '_')]
-            if isinstance(val, list):
-                val = " ".join(val)
-            if not val:
-                val = "-"
-            table.append((attr, val))
-
-        print >> sio, "  Parameter       Value"
-        print >> sio, "  ---------       -----"
-        print >> sio
-        for row in table:
-            print >> sio, "  %-15s %s" % (row[0], row[1])
-
-        print >> sio
-
-        return sio.getvalue()
-
     def __call__(self, session):
-        mlog = file(session.paths.log).read()
         taskconf = session.taskconf
 
-        body = self.fmt_taskconf(taskconf) + mlog
+        jobs_total = len(session.jobs.pending) + len(session.jobs.finished)
+        jobs_completed = len([ job for job, result in session.jobs.finished if result=="EXIT=0" ])
+        jobs_incomplete = jobs_total - jobs_completed
+
+        command = re.sub(r'^\S*/', '', taskconf['command'])
+
+        title = "session %d: %d/%d !OK (%s)" % (session.id, jobs_incomplete, jobs_total, command)
+
+        try:
+            body = logalyzer.logalyzer(session.paths.path)
+        except Exception:
+            sio = StringIO()
+            def header(title, c):
+                return title + "\n" + len(title) * c + "\n"
+
+            print >> sio, header("Logalyzer failure", "=")
+            traceback.print_exc(file=sio)
+            print >> sio
+            print >> sio, header("Fallback session log", "=")
+            print >> sio, taskconf.fmt()
+
+            manager_log = file(session.paths.log).read()
+            print >> sio, manager_log
+
+            body = sio.getvalue()
 
         for recipient in self.recipients:
 
-            subject = "[Cloudtask] " + taskconf.command
+            subject = "[Cloudtask] " + title
 
             self.sendmail(self.sender, recipient, 
                           subject, body)
@@ -157,8 +156,6 @@ class ShellHandler:
 
         if taskconf.workers:
             os.environ['CLOUDTASK_WORKERS'] = " ".join(taskconf.workers)
-
-        os.environ
 
         os.system(self.command)
 

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -19,19 +19,28 @@ Resolution order for options:
 3) CLOUDTASK_{PARAM_NAME} environment variable (lowest precedence)
 
 Options:
+    --resume=        Resume pending jobs of a previously run session
+    --retry=         Retry failed jobs of a previously run session
+
     --force          Don't ask for confirmation
 
+    --ssh-identity=  SSH identity keyfile to use (defaults to ~/.ssh/identity)
     --hub-apikey=    Hub API KEY (required if launching workers)
+
+    --snapshot-id=   Launch instance from a snapshot ID
     --backup-id=     TurnKey Backup ID to restore on launch
     --ami-id=        Force launch a specific AMI ID (default is the latest Core)
-
+    
     --ec2-region=    Region for instance launch (default: us-east-1)
     --ec2-size=      Instance launch size (default: m1.small)
     --ec2-type=      Instance launch type <s3|ebs> (default: s3)
 
     --sessions=      Path where sessions are stored (default: $HOME/.cloudtask)
 
-    --timeout=       How many seconds to wait before giving up (default: 3600)
+    --timeout=       How many seconds to wait for a job before failing (default: 3600)
+    --retries=       How many times to retry a failed job (default: 0)
+    --strikes=       How many consecutive failures before we retire worker (default: 0 - disabled)
+
     --user=          Username to execute commands as (default: root)
     --pre=           Worker setup command
     --post=          Worker cleanup command
@@ -45,7 +54,7 @@ Options:
     --report=        Task reporting hook, examples:
 
                      sh: command || py: file || py: code
-                     mail: from@foo.com to@bar.com 
+                     mail: from@foo.com to@bar.com
 
 Usage:
 
@@ -54,6 +63,9 @@ Usage:
 
     # resume session 1 while overriding timeout
     cloudtask --resume=1 --timeout=6
+
+    # retry failed jobs in session 2 while overriding the split
+    cloudtask --retry=2 --split=1
 
 
 """
@@ -65,6 +77,7 @@ import getopt
 import signal
 import traceback
 import re
+import time
 
 from session import Session
 
@@ -73,9 +86,13 @@ from command import fmt_argv
 
 from taskconf import TaskConf
 from reporter import Reporter
+from watchdog import Watchdog
+
+import ssh
 
 class Task:
 
+    COMMAND = None
     DESCRIPTION = None
     SESSIONS = None
 
@@ -95,6 +112,7 @@ class Task:
             print >> sys.stderr, "syntax: %s [ -opts ] [ extra args ]" % sys.argv[0]
 
         print >> sys.stderr, "syntax: %s [ -opts ] --resume=SESSION_ID" % sys.argv[0]
+        print >> sys.stderr, "syntax: %s [ -opts ] --retry=SESSION_ID" % sys.argv[0]
         if cls.DESCRIPTION:
             print >> sys.stderr, cls.DESCRIPTION.strip()
             print >> sys.stderr, "\n".join(__doc__.strip().splitlines()[1:])
@@ -104,9 +122,7 @@ class Task:
         sys.exit(1)
 
     @classmethod
-    def confirm(cls, taskconf, split, jobs):
-        print >> sys.stderr, "About to launch %d cloud server%s to execute the following task:" % (split, "s" if split and split > 1 else "")
-
+    def confirm(cls, taskconf, jobs):
         def filter(job):
             job = re.sub('^\s*', '', job[len(taskconf.command):])
             return job
@@ -117,35 +133,19 @@ class Task:
         job_range = ("%s .. %s" % (job_first, job_last) 
                      if job_first != job_last else "%s" % job_first)
 
-        table = [ ('jobs', '%d (%s)' % (len(jobs), job_range)) ]
+        print >> sys.stderr, "About to launch %d cloud server%s to execute %d jobs (%s):" % (taskconf.split, 
+                                                                                             "s" if taskconf.split and taskconf.split > 1 else "",
+                                                                                             len(jobs), job_range)
 
-        for attr in ('split', 'command', 'hub-apikey', 
-                     'ec2-region', 'ec2-size', 'ec2-type', 
-                     'user', 'backup-id', 'ami-id', 'workers', 
-                     'overlay', 'post', 'pre', 'timeout', 'report'):
-
-            val = taskconf[attr.replace('-', '_')]
-            if isinstance(val, list):
-                val = " ".join(val)
-            if not val:
-                val = "-"
-            table.append((attr, val))
-
-        print >> sys.stderr
-        print >> sys.stderr, "  Parameter       Value"
-        print >> sys.stderr, "  ---------       -----"
-        print >> sys.stderr
-        for row in table:
-            print >> sys.stderr, "  %-15s %s" % (row[0], row[1])
-
-        print >> sys.stderr
+        print >> sys.stderr, "\n" + taskconf.fmt()
 
         orig_stdin = sys.stdin 
-        sys.stdin = os.fdopen(sys.stderr.fileno(), 'r')
+        sys.stdin = os.fdopen(os.dup(sys.stderr.fileno()), 'r')
         while True:
             answer = raw_input("Is this really what you want? [yes/no] ")
             if answer:
                 break
+
         sys.stdin = orig_stdin
 
         if answer.lower() != "yes":
@@ -162,6 +162,7 @@ class Task:
                                        'h', ['help', 
                                              'force',
                                              'resume=',
+                                             'retry=',
                                              'sessions='] +
                                             [ attr.replace('_', '-') + '=' 
                                               for attr in TaskConf.__all__ ])
@@ -169,6 +170,7 @@ class Task:
             usage(e)
 
         opt_resume = None
+        opt_retry = None
         opt_force = False
 
         if cls.SESSIONS:
@@ -190,6 +192,12 @@ class Task:
                 except ValueError:
                     error("--resume session id must be an integer")
 
+            elif opt == '--retry':
+                try:
+                    opt_retry = int(val)
+                except ValueError:
+                    error("--retry session id must be an integer")
+
             elif opt == '--sessions':
                 if not isdir(val):
                     error("--sessions path '%s' is not a directory" % val)
@@ -199,8 +207,17 @@ class Task:
             elif opt == '--force':
                 opt_force = True
 
+        if opt_resume and opt_retry:
+            error("--retry and --resume can't be used together, different modes")
+
         if opt_resume:
             session = Session(opt_sessions, id=opt_resume)
+            taskconf = session.taskconf
+        elif opt_retry:
+            session = Session(opt_sessions, id=opt_retry)
+            session.jobs.update_retry_failed()
+            if not session.jobs.pending:
+                error("no failed jobs to retry")
             taskconf = session.taskconf
         else:
             session = None
@@ -226,8 +243,11 @@ class Task:
 
                 taskconf.overlay = abspath(val)
 
-            elif opt == '--timeout':
-                taskconf.timeout = int(val)
+            elif opt == '--ssh-identity':
+                if not isfile(val):
+                    error("ssh-identity '%s' not a file" % val)
+
+                taskconf.ssh_identity = abspath(val)
 
             elif opt == '--split':
                 taskconf.split = int(val)
@@ -245,6 +265,9 @@ class Task:
 
                 if taskconf.backup_id < 1:
                     error("--backup-id can't be smaller than 1")
+
+            elif opt[2:] in ('timeout', 'retries', 'strikes'):
+                setattr(taskconf, opt[2:], int(val))
 
             else:
                 opt = opt[2:]
@@ -267,7 +290,7 @@ class Task:
         else:
             reporter = None
 
-        if opt_resume:
+        if opt_resume or opt_retry:
             if args:
                 error("--resume incompatible with a command")
 
@@ -277,7 +300,7 @@ class Task:
                 print "session %d finished" % session.id
                 sys.exit(0)
             else:
-                print >> session.mlog, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
+                print >> session.logs.manager, "session %d: resuming (%d pending, %d finished)" % (session.id, len(session.jobs.pending), len(session.jobs.finished))
 
         else:
             if cls.COMMAND:
@@ -299,6 +322,10 @@ class Task:
 
             jobs = []
             for line in sys.stdin.readlines():
+                line = re.sub('#.*', '', line)
+                line = line.strip()
+                if not line:
+                    continue
                 args = shlex.split(line)
 
                 if isinstance(command, str):
@@ -308,73 +335,119 @@ class Task:
 
                 jobs.append(job)
 
+            if not jobs:
+                error("no jobs, nothing to do")
+
         split = taskconf.split if taskconf.split else 1
         if split > len(jobs):
             split = len(jobs)
+        taskconf.split = split
 
         if len(taskconf.workers) < split and not taskconf.hub_apikey:
             error("please provide a HUB APIKEY or more pre-launched workers")
 
         if os.isatty(sys.stderr.fileno()) and not opt_force :
-            cls.confirm(taskconf, split, jobs)
+            cls.confirm(taskconf, jobs)
 
         if not session:
             session = Session(opt_sessions)
-
         session.taskconf = taskconf
 
-        print >> session.mlog, "session %d (pid %d)" % (session.id, os.getpid())
-
-        def terminate(sig, f):
-            signal.signal(sig, signal.SIG_IGN)
-            raise CloudWorker.Terminated("caught signal (%d) to terminate" % sig, sig)
-
-        signal.signal(signal.SIGINT, terminate)
-        signal.signal(signal.SIGTERM, terminate)
-
-        executor = None
-
-        try:
-            executor = CloudExecutor(split, session, taskconf)
-            for job in jobs:
-                executor(job)
-
-            executor.join()
-
-        except Exception, e:
-            if not isinstance(e, CloudWorker.Error):
-                traceback.print_exc(file=session.mlog)
-
-            if executor:
-                executor.stop()
-                results = executor.results
-            else:
-                results = []
-
-            session.jobs.update(jobs, results)
-            print >> session.mlog, "session %d: terminated (%d finished, %d pending)" % \
-                                    (session.id, 
-                                     len(session.jobs.finished), 
-                                     len(session.jobs.pending))
-
-            sys.exit(1)
-
-        session.jobs.update(jobs, executor.results)
-
-        exitcodes = [ exitcode for command, exitcode in executor.results ]
-
-        succeeded = exitcodes.count(0)
-        failed = len(exitcodes) - succeeded
-
-        print >> session.mlog, "session %d: %d jobs in %d seconds (%d succeeded, %d failed)" % \
-                                (session.id, len(exitcodes), session.elapsed, succeeded, failed)
-
+        ok = cls.work(jobs, session, taskconf)
+        
         if reporter:
             reporter.report(session)
 
-        if session.jobs.pending:
-            print >> session.mlog, "session %d: no workers left alive, %d jobs pending" % (session.id, len(session.jobs.pending))
+        if not ok:
             sys.exit(1)
+
+    @classmethod
+    def work(cls, jobs, session, taskconf):
+
+        if taskconf.ssh_identity:
+            sshkey = ssh.PrivateKey(taskconf.ssh_identity)
+        else:
+            sshkey = ssh.TempPrivateKey()
+
+        def status(msg):
+            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            session.logs.manager.write("%s :: session %d %s\n" % (timestamp, session.id, msg))
+
+        status("(pid %d)" % os.getpid())
+        print >> session.logs.manager
+
+        class CaughtSignal(CloudWorker.Terminated):
+            pass
+
+        def terminate(sig, f):
+            signal.signal(sig, signal.SIG_IGN)
+            sigs = dict([ ( getattr(signal, attr), attr) 
+                            for attr in dir(signal) if attr.startswith("SIG") ])
+
+            raise CaughtSignal("caught %s termination signal" % sigs[sig], sig)
+
+        exception = None
+        while True:
+            watchdog = Watchdog(session.logs.manager, session.paths.workers, taskconf)
+
+            signal.signal(signal.SIGINT, terminate)
+            signal.signal(signal.SIGTERM, terminate)
+
+            executor = None
+
+            work_started = time.time()
+            try:
+                executor = CloudExecutor(session.logs, taskconf, sshkey)
+                for job in jobs:
+                    executor(job)
+
+                executor.join()
+                executor_results = executor.results
+
+            except Exception, exception:
+                if isinstance(exception, CaughtSignal):
+                    print >> session.logs.manager,  "# " + str(exception[0])
+
+                elif not isinstance(exception, (CloudWorker.Error, CloudWorker.Terminated)):
+                    traceback.print_exc(file=session.logs.manager)
+
+                if executor:
+                    executor.stop()
+                    executor_results = executor.results
+                else:
+                    executor_results = []
+
+            watchdog.terminate()
+            watchdog.join()
+
+            session.jobs.update(jobs, executor_results)
+
+            if len(session.jobs.pending) != 0 and executor_results and exception is None:
+                print >> session.logs.manager
+                status("(auto-resuming) %d pending jobs remaining" % len(session.jobs.pending))
+                print >> session.logs.manager
+
+                jobs = list(session.jobs.pending)
+                if taskconf.split > len(jobs):
+                    taskconf.split = len(jobs)
+            else:
+                break
+
+        session_results = [ result for job, result in session.jobs.finished ]
+
+        succeeded = session_results.count("EXIT=0")
+        timeouts = session_results.count("TIMEOUT")
+        errors = len(session_results) - succeeded - timeouts
+
+        pending = len(session.jobs.pending)
+        total = len(session.jobs.finished) + pending
+
+        print >> session.logs.manager
+        status("(%d seconds): %d/%d !OK - %d pending, %d timeouts, %d errors, %d OK" % \
+               (time.time() - work_started, total - succeeded, total, pending, timeouts, errors, succeeded))
+
+        ok = (total - succeeded == 0)
+        return ok
 
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:

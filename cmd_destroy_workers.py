@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -78,29 +78,29 @@ def main():
     else:
         fh = file(input)
 
-    addresses = fh.read().splitlines()
-    if not addresses:
+    ip_addresses = fh.read().splitlines()
+    if not ip_addresses:
         print "no workers to destroy"
         return
     
-    destroyed = Hub(hub_apikey).destroy(*addresses)
+    destroyed = Hub(hub_apikey).destroy(*ip_addresses)
     if not destroyed:
         fatal("couldn't destroy any workers")
     
-    addresses_left = list(set(addresses) - set(destroyed))
-    if addresses_left:
-        print >> sys.stderr, "warning: can't destroy " + " ".join(addresses_left)
+    ip_addresses_left = list(set(ip_addresses) - set([ ip_address for ip_address, instanceid in destroyed ]))
+    if ip_addresses_left:
+        print >> sys.stderr, "warning: can't destroy " + " ".join(ip_addresses_left)
 
-        addresses_left.sort()
+        ip_addresses_left.sort()
         if input != '-':
             fh = file(input, "w")
-            for address in addresses_left:
-                print >> fh, address
+            for ip_address in ip_addresses_left:
+                print >> fh, ip_address
             fh.close()
 
         sys.exit(2)
 
-    if not addresses_left:
+    if not ip_addresses_left:
         if input != '-':
             os.remove(input)
 

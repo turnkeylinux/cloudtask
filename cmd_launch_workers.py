@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -22,7 +22,8 @@ Options:
     --hub-apikey       Hub APIKEY
                        Environment: HUB_APIKEY
 
-    --backup-id        TurnKey Backup ID to restore
+    --snapshot-id      Launch instance from a snapshot ID
+    --backup-id        TurnKey Backup ID to restore on launch
     --ami-id           Force launch a specific AMI ID (default is the latest Core)
 
     --region           Region for instance launch (default: us-east-1)
@@ -61,6 +62,8 @@ import sys
 import getopt
 
 import signal
+from sighandle import sighandle
+
 from cloudtask import Hub
 from lazyclass import lazyclass
 
@@ -84,6 +87,7 @@ def main():
         'label': "Cloudtask worker",
         'backup_id': None,
         'ami_id': None,
+        'snapshot_id': None,
     }
 
     hub_apikey = os.environ.get('HUB_APIKEY', os.environ.get('CLOUDTASK_HUB_APIKEY'))
@@ -141,16 +145,16 @@ def main():
     stopped = Bool()
 
     def handler(s, f):
+        print >> sys.stderr, "caught SIGINT, stopping launch"
         stopped.value = True
 
-    signal.signal(signal.SIGINT, handler)
+    with sighandle(handler, signal.SIGINT):
+        def callback():
+            return not stopped.value
 
-    def callback():
-        return not stopped.value
-
-    for address in Hub(hub_apikey).launch(howmany, callback, **kwargs):
-        print >> output, address
-        output.flush()
+        for ipaddress, instanceid in Hub(hub_apikey).launch(howmany, logfh=sys.stderr, callback=callback, **kwargs):
+            print >> output, ipaddress
+            output.flush()
 
 if __name__ == "__main__":
     main()

@@ -1,5 +1,5 @@
 # 
-# Copyright (c) 2010-2011 Liraz Siri <liraz@turnkeylinux.org>
+# Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
 # 
 # This file is part of CloudTask.
 # 
@@ -8,8 +8,6 @@
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
 # 
-
-from __future__ import with_statement
 
 import os
 import time
@@ -21,7 +19,7 @@ import re
 from multiprocessing import Event, Queue
 from multiprocessing_utils import Parallelize, Deferred
 
-from sigignore import sigignore
+import sighandle
 
 from ssh import SSH
 from _hub import Hub
@@ -42,10 +40,21 @@ class Timeout:
     def reset(self):
         self.started = time.time()
 
+class Job:
+    class Retry(Parallelize.Worker.Retry):
+        pass
+
+    def __init__(self, command, retry_limit):
+        self.command = command
+        self.retry = 0
+        self.retry_limit = retry_limit
+
 class CloudWorker:
+    SSH_PING_RETRIES = 3
+
     Terminated = Parallelize.Worker.Terminated
 
-    class Error(Exception):
+    class Error(Terminated):
         pass
 
     @classmethod
@@ -59,7 +68,7 @@ class CloudWorker:
 
         return func
 
-    def __init__(self, session, taskconf, address=None, destroy=None, event_stop=None, launchq=None):
+    def __init__(self, session_logs, taskconf, sshkey, ipaddress=None, destroy=None, event_stop=None, launchq=None):
 
         self.pid = os.getpid()
 
@@ -68,40 +77,57 @@ class CloudWorker:
 
         self.event_stop = event_stop
 
-        self.wlog = session.wlog
-        self.mlog = session.mlog
-        self.session_key = session.key
+        self.logs = session_logs
+        self.sshkey = sshkey
+
+        self.strikes = taskconf.strikes
+        self.strike = 0
 
         self.timeout = taskconf.timeout
         self.cleanup_command = taskconf.post
         self.user = taskconf.user
 
-        self.address = address
+        self.ipaddress = ipaddress
+        self.instanceid = None
+
         self.hub = None
         self.ssh = None
 
         if destroy is None:
-            if address:
+            if ipaddress:
                 destroy = False
             else:
                 destroy = True
         self.destroy = destroy
 
-        if not address:
+        if not ipaddress:
             if not taskconf.hub_apikey:
                 raise self.Error("can't auto launch a worker without a Hub API KEY")
             self.hub = Hub(taskconf.hub_apikey)
 
-            with sigignore(signal.SIGINT, signal.SIGTERM):
-                if not launchq:
-                    self.address = list(self.hub.launch(1, **taskconf.ec2_opts))[0]
-                else:
-                    self.address = launchq.get()
+            if launchq:
+                with sighandle.sigignore(signal.SIGINT, signal.SIGTERM):
+                    instance = launchq.get()
+            else:
+                class Bool:
+                    value = False
+                stopped = Bool()
 
-            if not self.address or (event_stop and event_stop.is_set()):
+                def handler(s, f):
+                    stopped.value = True
+
+                with sighandle.sighandle(handler, signal.SIGINT, signal.SIGTERM):
+                    def callback():
+                        return not stopped.value
+
+                    instance = list(self.hub.launch(1, VerboseLog(session_logs.manager), callback, **taskconf.ec2_opts))[0]
+
+            if not instance or (event_stop and event_stop.is_set()):
                 raise self.Terminated
 
-            self.status("launched new worker")
+            self.ipaddress, self.instanceid = instance
+
+            self.status("launched worker %s" % self.instanceid)
 
         else:
             self.status("using existing worker")
@@ -109,18 +135,18 @@ class CloudWorker:
         self.handle_stop = self._stop_handler(event_stop)
 
         try:
-            self.ssh = SSH(self.address, 
-                           identity_file=self.session_key.path, 
+            self.ssh = SSH(self.ipaddress, 
+                           identity_file=self.sshkey.path, 
                            login_name=taskconf.user,
                            callback=self.handle_stop)
         except SSH.Error, e:
             self.status("unreachable via ssh: " + str(e))
-            traceback.print_exc(file=self.wlog)
+            traceback.print_exc(file=self.logs.worker)
 
             raise self.Error(e)
 
         try:
-            self.ssh.copy_id(self.session_key.public)
+            self.ssh.copy_id(self.sshkey)
 
             if taskconf.overlay:
                 self.ssh.apply_overlay(taskconf.overlay)
@@ -130,7 +156,7 @@ class CloudWorker:
 
         except Exception, e:
             self.status("setup failed")
-            traceback.print_exc(file=self.wlog)
+            traceback.print_exc(file=self.logs.worker)
 
             raise self.Error(e)
 
@@ -141,35 +167,39 @@ class CloudWorker:
                 if self.cleanup_command:
                     self.ssh.command(self.cleanup_command).close()
 
-                self.ssh.remove_id(self.session_key.public)
+                self.ssh.remove_id(self.sshkey)
             except:
                 pass
 
-        if self.destroy and self.address and self.hub:
-            destroyed = self.hub.destroy(self.address)
-            if self.address in destroyed:
-                self.status("destroyed worker")
-            else:
-                self.status("failed to destroy worker")
+        if self.destroy and self.ipaddress and self.hub:
+            try:
+                destroyed = [ (ipaddress, instanceid) 
+                              for ipaddress, instanceid in self.hub.destroy(self.ipaddress) 
+                              if ipaddress == self.ipaddress ]
+                
+                if destroyed:
+                    ipaddress, instanceid = destroyed[0]
+                    self.status("destroyed worker %s" % instanceid)
+            except:
+                self.status("failed to destroy worker %s" % self.instanceid)
+                traceback.print_exc(file=self.logs.worker)
+                raise
 
     def __getstate__(self):
-        return (self.address, self.pid)
+        return (self.ipaddress, self.pid)
 
     def __setstate__(self, state):
-        (self.address, self.pid) = state
+        (self.ipaddress, self.pid) = state
 
-    def status(self, msg):
-        wlog = self.wlog
-        mlog = self.mlog
+    def status(self, msg, after_output=False):
+        timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
 
-        if wlog:
-            timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            print >> wlog, "# %s [%s] %s" % (timestamp, self.address, msg)
+        c = "\n" if after_output else ""
+        self.logs.worker.status.write(c + "# %s [%s] %s\n" % (timestamp, self.ipaddress, msg))
+        self.logs.manager.write("%s (%d): %s\n" % (self.ipaddress, os.getpid(), msg))
 
-        if mlog and mlog != wlog:
-            mlog.write("%s (%d): %s" % (self.address, os.getpid(), msg) + "\n")
-
-    def __call__(self, command):
+    def __call__(self, job):
+        command = job.command
         timeout = self.timeout
 
         self.handle_stop()
@@ -179,23 +209,30 @@ class CloudWorker:
 
         timeout = Timeout(timeout)
         read_timeout = Timeout(self.ssh.TIMEOUT)
+
+        class CommandTimeout(Exception):
+            pass
+
+        class WorkerDied(Exception):
+            pass
+
         def handler(ssh_command, buf):
-            if buf and self.wlog:
-                self.wlog.write(buf)
+            if buf:
                 read_timeout.reset()
+                self.logs.worker.write(buf)
 
             if ssh_command.running and timeout.expired():
-                ssh_command.terminate()
-                self.status("timeout %d # %s" % (timeout.seconds, command))
-                return
+                raise CommandTimeout
 
             if read_timeout.expired():
-                try:
-                    self.ssh.ping()
-                except self.ssh.Error, e:
-                    ssh_command.terminate()
-                    self.status("worker died (%s) # %s" % (e, command))
-                    raise SSH.TimeoutError
+                for retry in range(self.SSH_PING_RETRIES):
+                    try:
+                        self.ssh.ping()
+                        break
+                    except self.ssh.Error, e:
+                        pass
+                else:
+                    raise WorkerDied(e)
 
                 read_timeout.reset()
 
@@ -207,21 +244,44 @@ class CloudWorker:
 
         # SigTerminate raised in serial mode, the other in Parallelized mode
         except self.Terminated:
-            ssh_command.terminate()
-            self.status("terminated # %s" % command)
+            self.status("terminated # %s" % command, True)
             raise
 
-        if ssh_command.exitcode is not None:
+        except WorkerDied, e:
+            self.status("worker died (%s) # %s" % (e, command), True)
+            raise self.Error(e)
+
+        except CommandTimeout:
+            self.status("timeout # %s" % command, True)
+            exitcode = None
+
+        else:
             if ssh_command.exitcode == 255 and re.match(r'^ssh: connect to host.*:.*$', ssh_command.output):
                 self.status("worker unreachable # %s" % command)
-                raise SSH.Error(ssh_command.output)
+                self.logs.worker.write("%s\n" % ssh_command.output)
+                raise self.Error(SSH.Error(ssh_command.output))
 
-            self.status("exit %d # %s" % (ssh_command.exitcode, command))
+            self.status("exit %d # %s" % (ssh_command.exitcode, command), True)
+            exitcode = ssh_command.exitcode
 
-        if self.wlog:
-            print >> self.wlog
+        finally:
+            ssh_command.terminate()
 
-        return (str(command), ssh_command.exitcode)
+        if ssh_command.exitcode != 0:
+            self.strike += 1
+            if self.strikes and self.strike >= self.strikes:
+                self.status("terminating worker after %d strikes" % self.strikes)
+                raise self.Error
+
+            if job.retry < job.retry_limit:
+                job.retry += 1
+                self.status("will retry (%d of %d)" % (job.retry, job.retry_limit))
+
+                raise job.Retry
+        else:
+            self.strike = 0
+
+        return (str(command), exitcode)
 
     def __del__(self):
         if os.getpid() != self.pid:
@@ -229,32 +289,41 @@ class CloudWorker:
 
         self._cleanup()
 
+class VerboseLog:
+    def __init__(self, fh):
+        self.fh = fh
+
+    def write(self, s):
+        self.fh.write("# " + s)
+
 class CloudExecutor:
     class Error(Exception):
         pass
 
-    def __init__(self, split, session, taskconf):
-        addresses = taskconf.workers
+    def __init__(self, session_logs, taskconf, sshkey):
+        ipaddresses = taskconf.workers
+
+        split = taskconf.split
         if split == 1:
             split = False
 
         if not split:
-            if addresses:
-                address = addresses[0]
+            if ipaddresses:
+                ipaddress = ipaddresses[0]
             else:
-                address = None
-            self._execute = CloudWorker(session, taskconf, address)
+                ipaddress = None
+            self._execute = CloudWorker(session_logs, taskconf, sshkey, ipaddress)
             self.results = []
 
         else:
-            addresses = copy.copy(addresses)
+            ipaddresses = copy.copy(ipaddresses)
 
             workers = []
             self.event_stop = Event()
             
             launchq = None
 
-            new_workers = split - len(addresses)
+            new_workers = split - len(ipaddresses)
             if new_workers > 0:
                 if not taskconf.hub_apikey:
                     raise self.Error("need API KEY to launch %d new workers" % new_workers)
@@ -268,9 +337,9 @@ class CloudExecutor:
                     hub = Hub(taskconf.hub_apikey)
                     i = None
                     try:
-                        for i, address in enumerate(hub.launch(new_workers, callback, **taskconf.ec2_opts)):
-                            launchq.put(address)
-                    except hub.Error, e:
+                        for i, instance in enumerate(hub.launch(new_workers, VerboseLog(session_logs.manager), callback, **taskconf.ec2_opts)):
+                            launchq.put(instance)
+                    except Exception, e:
                         unlaunched_workers = new_workers - (i + 1) \
                                              if i is not None \
                                              else new_workers
@@ -279,17 +348,17 @@ class CloudExecutor:
                             launchq.put(None)
 
                         if not isinstance(e, hub.Stopped):
-                            traceback.print_exc(file=session.mlog)
+                            traceback.print_exc(file=session_logs.manager)
 
                 threading.Thread(target=thread).start()
 
             for i in range(split):
-                if addresses:
-                    address = addresses.pop(0)
+                if ipaddresses:
+                    ipaddress = ipaddresses.pop(0)
                 else:
-                    address = None
+                    ipaddress = None
 
-                worker = Deferred(CloudWorker, session, taskconf, address, 
+                worker = Deferred(CloudWorker, session_logs, taskconf, sshkey, ipaddress, 
                                   event_stop=self.event_stop, launchq=launchq)
 
                 workers.append(worker)
@@ -298,14 +367,25 @@ class CloudExecutor:
             self.results = self._execute.results
 
         self.split = split
+        self.job_retry_limit = taskconf.retries
 
     def __call__(self, job):
-        result = self._execute(job)
-        if not self.split:
-            self.results.append(result)
+        if not isinstance(job, Job):
+            job = Job(job, self.job_retry_limit)
+
+        if self.split:
+            return self._execute(job)
+
+        try:
+            result = self._execute(job)
+        except job.Retry:
+            return self(job)
+
+        self.results.append(result)
 
     def stop(self):
         if not self.split:
+            self._execute = None
             return
 
         self.event_stop.set()
@@ -315,4 +395,5 @@ class CloudExecutor:
     def join(self):
         if self.split:
             self._execute.wait(keepalive=False, keepalive_spares=1)
-            self.stop()
+
+        self.stop()

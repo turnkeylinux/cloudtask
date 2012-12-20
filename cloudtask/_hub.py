@@ -11,8 +11,11 @@
 
 from hub import Spawner
 
+class Error(Exception):
+    pass
+
 class Hub(Spawner):
-    def launch(self, howmany, callback=None, **kwargs):
+    def launch(self, howmany, logfh=None, callback=None, **kwargs):
         """launch <howmany> workers, wait until booted and return their public IP addresses.
 
         Invoke callback every frequently. If callback returns False, we terminate launching.
@@ -21,8 +24,11 @@ class Hub(Spawner):
         if 'sec_updates' not in kwargs:
             kwargs.update(sec_updates='SKIP')
 
-        name = kwargs.pop('backup_id', None)
-        if not name:
-            name = 'core'
+        snapshot_id = kwargs.pop('snapshot_id', None)
+        ami_id = kwargs.pop('ami_id', None)
 
-        return Spawner.launch(self, name, howmany, callback, **kwargs)
+        if snapshot_id and ami_id:
+            raise Error("can't force together unrelated ami and snapshot")
+
+        name = snapshot_id or ami_id or 'core'
+        return Spawner.launch(self, name, howmany, logfh, callback, **kwargs)

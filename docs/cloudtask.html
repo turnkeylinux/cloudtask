@@ -6,7 +6,7 @@
 <meta name="generator" content="Docutils 0.7: http://docutils.sourceforge.net/" />
 <title>CloudTask</title>
 <meta name="author" content="Liraz Siri &lt;liraz&#64;turnkeylinux.org&gt;" />
-<meta name="date" content="2011-07-31" />
+<meta name="date" content="2012-12-19" />
 <style type="text/css">
 
 /*
@@ -322,7 +322,7 @@ ul.auto-toc {
 <tr><th class="docinfo-name">Author:</th>
 <td>Liraz Siri &lt;<a class="reference external" href="mailto:liraz&#64;turnkeylinux.org">liraz&#64;turnkeylinux.org</a>&gt;</td></tr>
 <tr><th class="docinfo-name">Date:</th>
-<td>2011-07-31</td></tr>
+<td>2012-12-19</td></tr>
 <tr class="field"><th class="docinfo-name">Manual section:</th><td class="field-body">8</td>
 </tr>
 <tr class="field"><th class="docinfo-name">Manual group:</th><td class="field-body">misc</td>
@@ -332,7 +332,8 @@ ul.auto-toc {
 <div class="section" id="synopsis">
 <h1>SYNOPSIS</h1>
 <p>cat jobs | cloudtask [ -opts ] [ command ]</p>
-<p>cloudtask [ -opts ] --resume=SESSION_ID</p>
+<p>cloudtask [ -opts ] --resume=SESSION_ID
+cloudtask [ -opts ] --retry=SESSION_ID</p>
 </div>
 <div class="section" id="description">
 <h1>DESCRIPTION</h1>
@@ -389,46 +390,41 @@ hello world
 EOF
 
 $ cat jobs | cloudtask echo executed:
-About to launch 1 cloud server to execute the following task:
+$ cat jobs | $ct echo executed:
+About to launch 1 cloud server to execute 3 jobs (hello .. hello world):
 
   Parameter       Value
   ---------       -----
 
-  jobs            3 (hello .. hello world)
+  split           1
   command         echo executed:
-  hub-apikey      BXFAVBHUEVHMCDQ
+  hub-apikey      CQHKTKHN7N2ZR6A
   ec2-region      us-east-1
   ec2-size        m1.small
   ec2-type        s3
-  user            root
-  backup-id       -
-  workers         -
-  overlay         -
-  post            -
-  pre             -
-  timeout         -
-  report          -
+  user            liraz
+  timeout         3600
 
 Is this really what you want? [yes/no] yes
-session 1 (pid 22749)
-# 2011-08-11 03:51:08 [127.137.205.30] launched new worker
-# 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello
+2012-12-19 23:44:20 :: session 1 (pid 11438)
+
+# booting instance i-2ef94c5b ...
+127.124.183.115 (11438): launched worker i-2ef94c5b
+127.124.183.115 (11438): echo executed: hello
 executed: hello
-Connection to 127.137.205.30 closed.
-# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello
-
-# 2011-08-11 03:51:09 [127.137.205.30] echo executed: world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: hello
+127.124.183.115 (11438): echo executed: world
 executed: world
-Connection to 127.137.205.30 closed.
-# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: world
-
-# 2011-08-11 03:51:09 [127.137.205.30] echo executed: hello world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: world
+127.124.183.115 (11438): echo executed: hello world
 executed: hello world
-Connection to 127.137.205.30 closed.
-# 2011-08-11 03:51:09 [127.137.205.30] exit 0 # echo executed: hello world
+Connection to 127.124.183.115 closed.
+127.124.183.115 (11438): exit 0 # echo executed: hello world
+127.124.183.115 (11438): destroyed worker i-2ef94c5b
 
-session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
-# 2011-08-11 03:51:10 [127.137.205.30] destroyed worker
+2012-12-19 23:44:24 :: session 1 (11 seconds): 0/3 !OK - 0 pending, 0 timeouts, 0 errors, 3 OK
 </pre>
 </div>
 <div class="section" id="options">
@@ -437,16 +433,45 @@ session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
 <col class="option" />
 <col class="description" />
 <tbody valign="top">
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--resume=<var>SESSION_ID</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Instead of launching a new session, resume the pending jobs of a
+previous session</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--retry=<var>SESSION_ID</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Instead of launching a new session, retry the failed jobs of a
+previous session</td></tr>
 <tr><td class="option-group">
 <kbd><span class="option">--force</span></kbd></td>
 <td>Don't ask for confirmation</td></tr>
+</tbody>
+</table>
+<dl class="docutils">
+<dt>--ssh-identity=</dt>
+<dd>SSH identity keyfile to use (defaults to ~/.ssh/identity)</dd>
+</dl>
+<table class="docutils option-list" frame="void" rules="none">
+<col class="option" />
+<col class="description" />
+<tbody valign="top">
 <tr><td class="option-group" colspan="2">
 <kbd><span class="option">--hub-apikey=<var>APIKEY</var></span></kbd></td>
 </tr>
 <tr><td>&nbsp;</td><td>Hub API KEY (required if launching workers)</td></tr>
-<tr><td class="option-group">
-<kbd><span class="option">--backup-id=<var>ID</var></span></kbd></td>
-<td>TurnKey Backup ID to restore on launch</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--backup-id=<var>BACKUP-ID</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>TurnKey Backup ID to restore on launch</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--snapshot-id=<var>SNAPSHOT-ID</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Launch instance from a snapshot ID</td></tr>
+<tr><td class="option-group" colspan="2">
+<kbd><span class="option">--ami-id=<var>AMI-ID</var></span></kbd></td>
+</tr>
+<tr><td>&nbsp;</td><td>Force launch a specific AMI ID (default is the latest core)</td></tr>
 <tr><td class="option-group" colspan="2">
 <kbd><span class="option">--ec2-region=<var>REGION</var></span></kbd></td>
 </tr>
@@ -455,8 +480,11 @@ session 1: 3 jobs in 11 seconds (3 succeeded, 0 failed)
 <pre class="last literal-block">
 us-east-1 (Virginia, USA)
 us-west-1 (California, USA)
+us-west-2 (Oregon, USA)
 eu-west-1 (Ireland, Europe)
-ap-southeast-1 (Singapore, Asia)
+ap-southeast-1 (Singapore, South-East Asia)
+ap-northeast-1 (Tokyo, North-East Asia)
+sa-east-1 (Sao Paulo, South America)
 </pre>
 </td></tr>
 <tr><td class="option-group" colspan="2">
@@ -482,6 +510,12 @@ c1.medium (2 CPU cores, 1.7G RAM, 350G tmp storage)
 <kbd><span class="option">--timeout=<var>SECONDS</var></span></kbd></td>
 </tr>
 <tr><td>&nbsp;</td><td>How many seconds to wait before giving up (default: 3600)</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">--retries=<var>NUM</var></span></kbd></td>
+<td>How many times to retry a failed job (default: 0)</td></tr>
+<tr><td class="option-group">
+<kbd><span class="option">--strikes=<var>NUM</var></span></kbd></td>
+<td>How many consecutive failures before we retire worker</td></tr>
 <tr><td class="option-group" colspan="2">
 <kbd><span class="option">--user=<var>USERNAME</var></span></kbd></td>
 </tr>
@@ -560,15 +594,30 @@ tail -f 1234
 </li>
 <li><p class="first">Fault tolerance: cloudtask is designed to reliably survive multiple
 types of failure. For example:</p>
-<ul class="simple">
-<li>worker servers are continually monitored for failure so that a job
+<ul>
+<li><p class="first">worker servers are continually monitored for failure so that a job
 executing on a failed server may be rerouted to a working server. A
-task will continue executing so long as a single worker survives.</li>
-<li>the user can specify a per-job timeout so that jobs that freeze up
+task will continue executing so long as a single worker survives.</p>
+</li>
+<li><p class="first">the user can specify a per-job timeout so that jobs that freeze up
 for whatever reason will time out gracefully without jamming upt he
-worker indefinitely.</li>
-<li>In case of Hub API failure cloudtask will wait a few seconds and try
-again.</li>
+worker indefinitely.</p>
+</li>
+<li><p class="first">In case of Hub API failure cloudtask will wait a few seconds and try
+again.</p>
+</li>
+<li><p class="first">A watchdog process adds a layer of failure handling redundancy by
+monitoring session logs for workers that have frozen up and to clean
+up instances which the workers failed to destroy for some reason.</p>
+<p>A worker can only freeze up if their timeout logic has broken
+somehow. In practice this can only happen due to an underlying
+system failure (e.g., system ran out of memory)</p>
+<p>In usual operation, launched instances are automatically destroyed
+by workers at the end of their operation. This may fail due to
+temporary cloud/network outages. In case of failure, the watchdog
+will retry to destroy launched instances every 5 minutes for 3
+hours.</p>
+</li>
 </ul>
 </li>
 <li><p class="first">Abort and resume capability: a task can be aborted at any time by
@@ -590,6 +639,11 @@ session context.</li>
 <li><cite>py</cite>: execute an arbitrary snippet of Python code. The session and
 task configuration are accessible as local variables.</li>
 </ol>
+</li>
+<li><p class="first">Session log analysis (AKA logalyzer): the default emailed report is a
+digest compiled by analyzing the session logs. This shows a low-noise,
+actionable summary of failed and successful jobs, workers, batch costs
+and efficiencies, etc.</p>
 </li>
 </ul>
 </div>
@@ -620,6 +674,7 @@ $ mkdir $HOME/cloudtasks
 $ cd $HOME/cloudtasks
 
 $ cat &gt; refresh-iso &lt;&lt; 'EOF'
+#!/usr/bin/env python
 from cloudtask import Task
 
 class RefreshISO(Task):
@@ -638,33 +693,30 @@ EOF
 $ chmod +x ./refresh-iso
 
 $ cat $PATH_LIST_APPLIANCES | ./refresh-iso
-About to launch 10 cloud servers to execute the following task:
+About to launch 10 cloud servers to execute 101 jobs (appengine-go .. zurmo):
 
   Parameter       Value
   ---------       -----
 
-  jobs            40 (appengine .. zimbra)
+  split           10
   command         refresh-iso-security-updates
-  hub-apikey      5YGVPEMHJHU5EA
+  hub-apikey      CQHKTKHN7N2ZR6A
   ec2-region      us-east-1
   ec2-size        m1.small
   ec2-type        s3
-  user            root
+  user            liraz
   backup-id       123
-  workers         -
-  overlay         -
-  post            -
-  pre             -
-  timeout         -
-  report          mail: cloudtask&#64;turnkeylinux.org liraz&#64;turnkeylinux.org
+  timeout         3600
+  report          mail: cloudtask&#64;example.com alon&#64;example.com liraz&#64;example.com
 
 Is this really what you want? [yes/no] yes
+2012-12-19 23:57:25 :: session 3 (pid 13845)
 
-session 11 (pid 29709)
-88.178.132.231 (29721): launched new worker
-88.214.141.175 (29722): launched new worker
-88.15.179.7 (29724): launched new worker
-88.229.38.128 (29723): launched new worker
+# booting instance i-0c7acff6 ...
+# booting instance i-9e8bec5e ...
+127.150.56.219 (13859): launched worker i-0c7acff6
+127.49.232.160 (13860): launched worker i-9e8bec5e
+# booting instance i-49528c78 ...
 
 ...
 </pre>
@@ -766,6 +818,60 @@ EOF
 chmod +x helloworld
 </pre>
 </div>
+</div>
+<div class="section" id="ssh-authentication">
+<h1>SSH AUTHENTICATION</h1>
+<p>Cloudtask uses SSH to log into remote workers, transfer files and
+execute commands. You can't SSH into a remote worker unless
+authentication has been properly set up. The local ssh client must be
+capable of authenticating to the remote worker with its ssh identity.
+Password authentication is not supported. Your ssh identity must be
+added to the remote worker's authorized keys list.</p>
+<p>The easiest and most reliable way to do this is to:</p>
+<ol class="arabic">
+<li><p class="first">Generate an SSH keypair:</p>
+<pre class="literal-block">
+$ ssh-keygen -f cloudtask-keypair -N ''
+Generating public/private rsa key pair.
+Your identification has been saved in cloudtask-keypair.
+Your public key has been saved in cloudtask-keypair.pub.
+The key fingerprint is:
+c5:88:16:8e:78:a9:b9:b9:c1:c3:5d:87:e5:03:8d:3c liraz&#64;backstage
+The key's randomart image is:
++--[ RSA 2048]----+
+|      .          |
+|   . = = o       |
+|  . + E + o      |
+|   + . * .       |
+|  o   o S        |
+| o + . . .       |
+|  B .            |
+|   +             |
+|  .              |
++-----------------+
+</pre>
+</li>
+<li><p class="first">Log into your Hub account, go to the User Profile page and cut and
+paste the contents of cloudtask-keypair.pub to the Authorized Keys
+textbox. This ensures that cloudtask-keypair will be added to the
+list of authorized keys on newly launched instances.</p>
+</li>
+</ol>
+<p>If you are running Cloudtask on a remote machine and don't want to leave
+your authorized key on it, there is a somewhat safer, though less
+reliable alternative. You can keep your authorized key on your local
+machine and forward your SSH agent to the remote machine running
+Cloudtask:</p>
+<pre class="literal-block">
+ssh -A my-cloudtask-controller
+</pre>
+<p>Then when you run Cloudtask, as soon as it launches a new instance it
+will use your forwarded identity to add a temporary identity to the list
+of authorized keys on the newly launched remote instance. This will
+allow Cloudtask to continue to access the worker even if you log out and
+cut off access to the forwarded SSH agent.</p>
+<p>You'll need to make sure you stay logged on with the forwarded SSH agent
+until the last worker launches and authorizes the temporary identity.</p>
 </div>
 <div class="section" id="how-it-works">
 <h1>HOW IT WORKS</h1>
