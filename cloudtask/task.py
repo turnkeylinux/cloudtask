@@ -24,6 +24,7 @@ Options:
 
     --force          Don't ask for confirmation
 
+    --ssh-identity=  SSH identity keyfile to use (defaults to ~/.ssh/identity)
     --hub-apikey=    Hub API KEY (required if launching workers)
 
     --snapshot-id=   Launch instance from a snapshot ID
@@ -87,27 +88,7 @@ from taskconf import TaskConf
 from reporter import Reporter
 from watchdog import Watchdog
 
-from temp import TempFile
-import executil
-import uuid
-
-class TempSSHKey(TempFile):
-    def __init__(self):
-        TempFile.__init__(self, prefix='key_')
-        os.remove(self.path)
-
-        self.uuid = uuid.uuid4()
-        executil.getoutput("ssh-keygen -N '' -f %s -C %s" % (self.path, self.uuid))
-
-    @property
-    def public(self):
-        return self.path + ".pub"
-
-    def __del__(self):
-        if os.getpid() == self.pid:
-            os.remove(self.public)
-
-        TempFile.__del__(self)
+import ssh
 
 class Task:
 
@@ -164,6 +145,7 @@ class Task:
             answer = raw_input("Is this really what you want? [yes/no] ")
             if answer:
                 break
+
         sys.stdin = orig_stdin
 
         if answer.lower() != "yes":
@@ -260,6 +242,12 @@ class Task:
                     error("overlay '%s' not a directory" % val)
 
                 taskconf.overlay = abspath(val)
+
+            elif opt == '--ssh-identity':
+                if not isfile(val):
+                    error("ssh-identity '%s' not a file" % val)
+
+                taskconf.ssh_identity = abspath(val)
 
             elif opt == '--split':
                 taskconf.split = int(val)
@@ -376,6 +364,11 @@ class Task:
     @classmethod
     def work(cls, jobs, session, taskconf):
 
+        if taskconf.ssh_identity:
+            sshkey = ssh.PrivateKey(taskconf.ssh_identity)
+        else:
+            sshkey = ssh.TempPrivateKey()
+
         def status(msg):
             timestamp = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
             session.logs.manager.write("%s :: session %d %s\n" % (timestamp, session.id, msg))
@@ -403,8 +396,6 @@ class Task:
             executor = None
 
             work_started = time.time()
-            sshkey = TempSSHKey()
-
             try:
                 executor = CloudExecutor(session.logs, taskconf, sshkey)
                 for job in jobs:

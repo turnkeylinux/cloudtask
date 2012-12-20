@@ -146,7 +146,7 @@ class CloudWorker:
             raise self.Error(e)
 
         try:
-            self.ssh.copy_id(self.sshkey.public)
+            self.ssh.copy_id(self.sshkey)
 
             if taskconf.overlay:
                 self.ssh.apply_overlay(taskconf.overlay)
@@ -167,7 +167,7 @@ class CloudWorker:
                 if self.cleanup_command:
                     self.ssh.command(self.cleanup_command).close()
 
-                self.ssh.remove_id(self.sshkey.public)
+                self.ssh.remove_id(self.sshkey)
             except:
                 pass
 

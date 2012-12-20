@@ -9,8 +9,43 @@
 # option) any later version.
 # 
 
+import os
 from os.path import *
 from command import Command
+
+from temp import TempFile
+import executil
+import hashlib
+
+class PrivateKey:
+    class Error(Exception):
+        pass
+
+    def __init__(self, path):
+        self.path = abspath(path)
+        if not isfile(self.path):
+            raise self.Error("no such file '%s'" % self.path)
+
+    @property
+    def public(self):
+        try:
+            return executil.getoutput("ssh-keygen -y -P '' -f",  self.path)
+        except executil.ExecError, e:
+            raise self.Error("can't get public key for %s: " % self.path + str(e))
+
+    @property
+    def fingerprint(self):
+        return hashlib.sha1(self.public).hexdigest()
+
+class TempPrivateKey(TempFile, PrivateKey):
+    def __init__(self):
+        TempFile.__init__(self, prefix='key_')
+        os.remove(self.path)
+
+        executil.getoutput("ssh-keygen -N '' -f %s" % self.path)
+        os.remove(self.path + ".pub")
+
+        PrivateKey.__init__(self, self.path)
 
 class SSH:
     class Error(Exception):
@@ -95,14 +130,14 @@ class SSH:
                             callback=self.callback,
                             pty=pty)
 
-    def copy_id(self, key_path):
-        if not key_path.endswith(".pub"):
-            key_path += ".pub"
+    def copy_id(self, key):
+        if not isinstance(key, PrivateKey):
+            key = PrivateKey(key)
 
         command = 'mkdir -p $HOME/.ssh; cat >> $HOME/.ssh/authorized_keys'
 
         command = self.command(command)
-        command.tochild.write(file(key_path).read())
+        command.tochild.write("%s %s\n" % (key.public, key.fingerprint))
         command.tochild.close()
 
         try:
@@ -110,16 +145,11 @@ class SSH:
         except command.Error, e:
             raise self.Error("can't add id to authorized keys: " + str(e))
         
-    def remove_id(self, key_path):
-        if not key_path.endswith(".pub"):
-            key_path += ".pub"
+    def remove_id(self, key):
+        if not isinstance(key, PrivateKey):
+            key = PrivateKey(key)
 
-        vals = file(key_path).read().split()
-        if not vals[0].startswith('ssh'):
-            raise self.Error("invalid public key in " + key_path)
-        id = vals[-1]
-
-        command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % id
+        command = 'sed -i "/%s/d" $HOME/.ssh/authorized_keys' % key.fingerprint
         command = self.command(command)
 
         try:

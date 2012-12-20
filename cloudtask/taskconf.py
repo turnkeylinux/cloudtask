@@ -32,6 +32,8 @@ class TaskConf:
     ami_id = None
     snapshot_id = None
 
+    ssh_identity = None
+
     ec2_region = 'us-east-1'
     ec2_size = 'm1.small'
     ec2_type = 's3'
@@ -80,7 +82,7 @@ class TaskConf:
         sio = StringIO()
 
         table = []
-        for attr in ('split', 'command', 'hub-apikey', 
+        for attr in ('split', 'command', 'ssh-identity', 'hub-apikey', 
                      'ec2-region', 'ec2-size', 'ec2-type', 
                      'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers', 
                      'overlay', 'post', 'pre', 'timeout', 'report'):
