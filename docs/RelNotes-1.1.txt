@@ -1,0 +1,36 @@
+==================
+v1.1 Release Notes
+==================
+
+* improved robustness
+
+  - option --retries: retry failed jobs
+  - option --strikes: strike out workers that rack up N consecutive failures
+
+  - watchdog process
+      kills zombie workers
+      destroys leftover instances
+
+  - autoresume pending jobs
+  - retry failed ssh pings
+
+* SSH authentication: --ssh-identity option
+
+* Convenience: --retry=session-id option
+
+  Sets state of all failed jobs to pending, then resumes session
+
+* Better reports (logalyzer)
+
+  - better subject line
+  - calculate cost/efficiency
+  - show last output from failures
+
+* Better logging
+
+  - verboseness: log/print more information on what is happening, especially
+    instance boot/destruction
+
+  - filter progress bars and other noisy \r crap
+
+* Many bugfixes and refactorings
