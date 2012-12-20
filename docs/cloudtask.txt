@@ -135,6 +135,9 @@ OPTIONS
 --force                 
   Don't ask for confirmation
 
+--ssh-identity=
+  SSH identity keyfile to use (defaults to ~/.ssh/identity)
+
 --hub-apikey=APIKEY     
   Hub API KEY (required if launching workers)
 
@@ -479,6 +482,61 @@ from a common module::
     HelloWorld.main()
     EOF
     chmod +x helloworld
+
+SSH AUTHENTICATION
+==================
+
+Cloudtask uses SSH to log into remote workers, transfer files and
+execute commands. You can't SSH into a remote worker unless
+authentication has been properly set up. The local ssh client must be
+capable of authenticating to the remote worker with its ssh identity.
+Password authentication is not supported. Your ssh identity must be
+added to the remote worker's authorized keys list. 
+
+The easiest and most reliable way to do this is to:
+
+1) Generate an SSH keypair::
+
+    $ ssh-keygen -f cloudtask-keypair -N ''
+    Generating public/private rsa key pair.
+    Your identification has been saved in cloudtask-keypair.
+    Your public key has been saved in cloudtask-keypair.pub.
+    The key fingerprint is:
+    c5:88:16:8e:78:a9:b9:b9:c1:c3:5d:87:e5:03:8d:3c liraz@backstage
+    The key's randomart image is:
+    +--[ RSA 2048]----+
+    |      .          |
+    |   . = = o       |
+    |  . + E + o      |
+    |   + . * .       |
+    |  o   o S        |
+    | o + . . .       |
+    |  B .            |
+    |   +             |
+    |  .              |
+    +-----------------+
+
+2) Log into your Hub account, go to the User Profile page and cut and
+   paste the contents of cloudtask-keypair.pub to the Authorized Keys
+   textbox. This ensures that cloudtask-keypair will be added to the
+   list of authorized keys on newly launched instances.
+
+If you are running Cloudtask on a remote machine and don't want to leave
+your authorized key on it, there is a somewhat safer, though less
+reliable alternative. You can keep your authorized key on your local
+machine and forward your SSH agent to the remote machine running
+Cloudtask::
+
+    ssh -A my-cloudtask-controller
+    
+Then when you run Cloudtask, as soon as it launches a new instance it
+will use your forwarded identity to add a temporary identity to the list
+of authorized keys on the newly launched remote instance. This will
+allow Cloudtask to continue to access the worker even if you log out and
+cut off access to the forwarded SSH agent. 
+
+You'll need to make sure you stay logged on with the forwarded SSH agent
+until the last worker launches and authorizes the temporary identity.
 
 HOW IT WORKS
 ============
