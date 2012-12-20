@@ -140,7 +140,7 @@ class Task:
         print >> sys.stderr, "\n" + taskconf.fmt()
 
         orig_stdin = sys.stdin 
-        sys.stdin = os.fdopen(sys.stderr.fileno(), 'r')
+        sys.stdin = os.fdopen(os.dup(sys.stderr.fileno()), 'r')
         while True:
             answer = raw_input("Is this really what you want? [yes/no] ")
             if answer:
