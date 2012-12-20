@@ -180,8 +180,6 @@ class CloudWorker:
                 if destroyed:
                     ipaddress, instanceid = destroyed[0]
                     self.status("destroyed worker %s" % instanceid)
-                else:
-                    raise self.Error("Hub didn't destroy worker instance as requested!")
             except:
                 self.status("failed to destroy worker %s" % self.instanceid)
                 traceback.print_exc(file=self.logs.worker)
