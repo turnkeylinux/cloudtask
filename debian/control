@@ -6,7 +6,7 @@ Build-Depends: debhelper (>> 4.2.0), turnkey-pylib (>= 0.3)
 Standards-Version: 3.6.1
 
 Package: cloudtask
-Architecture: all
+Architecture: any
 Depends: python (>= 2.4), hubtools (>= 1.0), turnkey-pylib (>= 0.4), openssh-client
 Section: misc
 Description: Parallel batch execution with auto-launched cloud servers
