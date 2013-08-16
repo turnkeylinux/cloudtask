@@ -257,9 +257,14 @@ def logalyzer(session_path):
                                        if attr in c and c[attr] ]))
 
     fields = conf
+
+    fields['params'] = " ".join([ "%s=%s" % (k, c[k]) 
+                                  for k in ('timeout', 'retries', 'strikes') 
+                                  if k in c ])
+
     fields['workers'] = workers
 
-    for field in ('command', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'retries', 'strikes', 'report', '', 'workers'):
+    for field in ('command', 'backup_id', 'overlay', 'post', 'pre', '', 'params', '', 'report', '', 'workers'):
         if not field:
             print >> sio
         elif field in fields and fields[field]:
