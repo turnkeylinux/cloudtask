@@ -259,7 +259,7 @@ def logalyzer(session_path):
     fields = conf
     fields['workers'] = workers
 
-    for field in ('command', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'report', '', 'workers'):
+    for field in ('command', 'backup_id', 'overlay', 'post', 'pre', 'timeout', 'retries', 'strikes', 'report', '', 'workers'):
         if not field:
             print >> sio
         elif field in fields and fields[field]:
