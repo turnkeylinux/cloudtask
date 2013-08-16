@@ -11,6 +11,7 @@
 import os
 from os.path import *
 from cloudtask.session import Session
+import paths
 
 import re
 
@@ -191,8 +192,18 @@ def fmt_table(rows, title=[], groupby=None):
 def indent(depth, buf):
     return "\n".join([ " " * depth + line for line in buf.splitlines() ])
 
-def logalyzer(session_path):
+def mkdir(path):
+    if not exists(path):
+        os.makedirs(path)
+
+class OutputsPaths(paths.Paths):
+    files = ['failures', 'succeeded']
+
+def logalyzer(session_path, outputs_dir=None):
     session_paths = Session.Paths(session_path)
+
+    if outputs_dir:
+        outputs_dir = OutputsPaths(outputs_dir)
 
     conf = eval(file(session_paths.conf).read())
     log = file(session_paths.log).read()
@@ -311,6 +322,12 @@ def logalyzer(session_path):
             print >> sio, header(1, "Summary")
 
         failures = [ job for job in jobs if job.result != 'exit 0' ]
+        if outputs_dir:
+            mkdir(outputs_dir.failures)
+            for job in failures:
+                fpath = join(outputs_dir.failures, job.name)
+                file(fpath, "w").write(job.output)
+
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.result, job.worker_id)
                   for job in failures ]
 
@@ -335,6 +352,12 @@ def logalyzer(session_path):
         print >> sio, header(0, "%d succeeded" % stats.succeeded)
 
         completed = [ job for job in jobs if job.result == 'exit 0' ]
+        if outputs_dir:
+            mkdir(outputs_dir.succeeded)
+            for job in completed:
+                fpath = join(outputs_dir.succeeded, job.name)
+                file(fpath, "w").write(job.output)
+        
         rows = [ (job.name, fmt_elapsed(job.elapsed), job.worker_id)
                   for job in completed ]
         fmted_table = fmt_table(rows, ["NAME", "ELAPSED", "WORKER"], 

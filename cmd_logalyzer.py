@@ -25,7 +25,7 @@ def usage(e=None):
     if e:
         print >> sys.stderr, "error: " + str(e)
 
-    print >> sys.stderr, "Usage: %s path/to/session" % sys.argv[0]
+    print >> sys.stderr, "Usage: %s path/to/session [ path/to/outputs/ ]" % sys.argv[0]
     print >> sys.stderr, __doc__.strip()
     sys.exit(1)
 
@@ -45,14 +45,23 @@ def main():
         if opt in ('-h', '--help'):
             usage()
 
-    if len(args) != 1:
+    if len(args) < 1:
         usage()
 
     session_path = args[0]
+
     if not isdir(session_path):
         fatal("not a directory '%s'" % session_path)
 
-    print logalyzer.logalyzer(session_path)
+    if len(args) > 1:
+        outputs_dir = args[1]
+        if not isdir(outputs_dir):
+            fatal("not a directory '%s'" % outputs_dir)
+
+    else:
+        outputs_dir = None
+
+    print logalyzer.logalyzer(session_path, outputs_dir)
 
 if __name__ == "__main__":
     main()
