@@ -1,14 +1,14 @@
 #!/usr/bin/python
-# 
+#
 # Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
-# 
+#
 # This file is part of CloudTask.
-# 
+#
 # CloudTask is open source software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
-# 
+#
 
 """
 Execute commands in the cloud
@@ -30,7 +30,7 @@ Options:
     --snapshot-id=   Launch instance from a snapshot ID
     --backup-id=     TurnKey Backup ID to restore on launch
     --ami-id=        Force launch a specific AMI ID (default is the latest Core)
-    
+
     --ec2-region=    Region for instance launch (default: us-east-1)
     --ec2-size=      Instance launch size (default: m1.small)
     --ec2-type=      Instance launch type <s3|ebs> (default: s3)
@@ -48,7 +48,7 @@ Options:
     --split=         Number of workers to execute jobs in parallel
 
     --workers=       List of pre-launched workers to use
-        
+
                      path/to/file | host-1 ... host-N
 
     --report=        Task reporting hook, examples:
@@ -130,16 +130,16 @@ class Task:
         job_first = filter(jobs[0])
         job_last = filter(jobs[-1])
 
-        job_range = ("%s .. %s" % (job_first, job_last) 
+        job_range = ("%s .. %s" % (job_first, job_last)
                      if job_first != job_last else "%s" % job_first)
 
-        print >> sys.stderr, "About to launch %d cloud server%s to execute %d jobs (%s):" % (taskconf.split, 
+        print >> sys.stderr, "About to launch %d cloud server%s to execute %d jobs (%s):" % (taskconf.split,
                                                                                              "s" if taskconf.split and taskconf.split > 1 else "",
                                                                                              len(jobs), job_range)
 
         print >> sys.stderr, "\n" + taskconf.fmt()
 
-        orig_stdin = sys.stdin 
+        orig_stdin = sys.stdin
         sys.stdin = os.fdopen(os.dup(sys.stderr.fileno()), 'r')
         while True:
             answer = raw_input("Is this really what you want? [yes/no] ")
@@ -158,13 +158,13 @@ class Task:
         error = cls.error
 
         try:
-            opts, args = getopt.getopt(sys.argv[1:], 
-                                       'h', ['help', 
+            opts, args = getopt.getopt(sys.argv[1:],
+                                       'h', ['help',
                                              'force',
                                              'resume=',
                                              'retry=',
                                              'sessions='] +
-                                            [ attr.replace('_', '-') + '=' 
+                                            [ attr.replace('_', '-') + '='
                                               for attr in TaskConf.__all__ ])
         except getopt.GetoptError, e:
             usage(e)
@@ -313,8 +313,8 @@ class Task:
                 if len(shlex.split(command[0])) > 1:
                     command = command[0]
 
-            taskconf.command = (fmt_argv(command) 
-                                if isinstance(command, list) 
+            taskconf.command = (fmt_argv(command)
+                                if isinstance(command, list)
                                 else command)
 
             if os.isatty(sys.stdin.fileno()):
@@ -354,7 +354,7 @@ class Task:
         session.taskconf = taskconf
 
         ok = cls.work(jobs, session, taskconf)
-        
+
         if reporter:
             reporter.report(session)
 
@@ -381,7 +381,7 @@ class Task:
 
         def terminate(sig, f):
             signal.signal(sig, signal.SIG_IGN)
-            sigs = dict([ ( getattr(signal, attr), attr) 
+            sigs = dict([ ( getattr(signal, attr), attr)
                             for attr in dir(signal) if attr.startswith("SIG") ])
 
             raise CaughtSignal("caught %s termination signal" % sigs[sig], sig)
@@ -402,7 +402,7 @@ class Task:
                     executor(job)
 
                 executor.join()
-                executor_results = executor.results
+                executor_results = list(executor.results)
 
             except Exception, exception:
                 if isinstance(exception, CaughtSignal):
@@ -413,7 +413,7 @@ class Task:
 
                 if executor:
                     executor.stop()
-                    executor_results = executor.results
+                    executor_results = list(executor.results)
                 else:
                     executor_results = []
 
@@ -451,9 +451,9 @@ class Task:
 
 # set default class values to TaskConf defaults
 for attr in TaskConf.__all__:
-    setattr(Task, 
-            attr.upper(), 
-            os.environ.get('CLOUDTASK_' + attr.upper(), 
+    setattr(Task,
+            attr.upper(),
+            os.environ.get('CLOUDTASK_' + attr.upper(),
                            getattr(TaskConf, attr)))
 
 main = Task.main
