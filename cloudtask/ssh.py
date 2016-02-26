@@ -1,13 +1,13 @@
-# 
+#
 # Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
-# 
+#
 # This file is part of CloudTask.
-# 
+#
 # CloudTask is open source software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
-# 
+#
 
 import os
 from os.path import *
@@ -52,7 +52,7 @@ class SSH:
         pass
 
     class Command(Command):
-        TIMEOUT = 30
+        TIMEOUT = 120
 
         OPTS = ('StrictHostKeyChecking=no',
                 'PasswordAuthentication=no')
@@ -80,8 +80,8 @@ class SSH:
 
             return argv
 
-        def __init__(self, address, command, 
-                     identity_file=None, 
+        def __init__(self, address, command,
+                     identity_file=None,
                      login_name=None,
                      callback=None,
                      pty=False):
@@ -107,7 +107,7 @@ class SSH:
     TimeoutError = Command.TimeoutError
     TIMEOUT = Command.TIMEOUT
 
-    def __init__(self, address, 
+    def __init__(self, address,
                  identity_file=None, login_name=None, callback=None):
         self.address = address
         self.identity_file = identity_file
@@ -124,7 +124,7 @@ class SSH:
             raise self.Error(str(e).strip())
 
     def command(self, command, pty=False):
-        return self.Command(self.address, command, 
+        return self.Command(self.address, command,
                             identity_file=self.identity_file,
                             login_name=self.login_name,
                             callback=self.callback,
@@ -144,7 +144,7 @@ class SSH:
             command.close()
         except command.Error, e:
             raise self.Error("can't add id to authorized keys: " + str(e))
-        
+
     def remove_id(self, key):
         if not isinstance(key, PrivateKey):
             key = PrivateKey(key)
@@ -161,7 +161,7 @@ class SSH:
         if not isdir(overlay_path):
             raise self.Error("overlay path '%s' is not a directory" % overlay_path)
 
-        ssh_command = " ".join(self.Command.argv(self.identity_file, 
+        ssh_command = " ".join(self.Command.argv(self.identity_file,
                                                  self.login_name))
         argv = [ 'rsync', '--timeout=%d' % self.TIMEOUT, '-rHEL', '-e', ssh_command,
                 overlay_path.rstrip('/') + '/', "%s:/" % self.address ]
