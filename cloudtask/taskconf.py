@@ -1,13 +1,13 @@
-# 
+#
 # Copyright (c) 2010-2012 Liraz Siri <liraz@turnkeylinux.org>
-# 
+#
 # This file is part of CloudTask.
-# 
+#
 # CloudTask is open source software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by the
 # Free Software Foundation; either version 3 of the License, or (at your
 # option) any later version.
-# 
+#
 
 from StringIO import StringIO
 
@@ -35,7 +35,7 @@ class TaskConf:
     ssh_identity = None
 
     ec2_region = 'us-east-1'
-    ec2_size = 'm1.small'
+    ec2_size = 't2.small'
     ec2_type = 's3'
 
     report = None
@@ -66,8 +66,8 @@ class TaskConf:
 
     @property
     def ec2_opts(self):
-        opts = dict([ (attr[4:], self[attr]) 
-                       for attr in self.__all__ 
+        opts = dict([ (attr[4:], self[attr])
+                       for attr in self.__all__
                        if attr.startswith('ec2_') ])
         opts['label'] = 'Cloudtask: ' + self.command
 
@@ -82,9 +82,9 @@ class TaskConf:
         sio = StringIO()
 
         table = []
-        for attr in ('split', 'command', 'ssh-identity', 'hub-apikey', 
-                     'ec2-region', 'ec2-size', 'ec2-type', 
-                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers', 
+        for attr in ('split', 'command', 'ssh-identity', 'hub-apikey',
+                     'ec2-region', 'ec2-size', 'ec2-type',
+                     'user', 'backup-id', 'ami-id', 'snapshot-id', 'workers',
                      'overlay', 'post', 'pre', 'timeout', 'report'):
 
             val = self[attr.replace('-', '_')]
