@@ -57,7 +57,7 @@ How do I provide job commands with required input data?
 =======================================================
 
 Small amounts of input data may be stored in the TKLBAM backup or
-transfered over to the worker in the overlay. 
+transferred over to the worker in the overlay. 
 
 For more substantial amounts of input data, it is recommended to pull in
 data over the network (e.g., from a file server or Amazon S3).
