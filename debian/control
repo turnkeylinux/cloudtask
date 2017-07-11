@@ -15,5 +15,4 @@ Depends:
  openssh-client,
  python (>= 2.4),
  turnkey-pylib (>= 0.4),
-Section: misc
 Description: Parallel batch execution with auto-launched cloud servers
