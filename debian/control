@@ -11,6 +11,7 @@ Package: cloudtask
 Architecture: any
 Depends:
  hubtools (>= 1.0),
+ ${misc:Depends},
  openssh-client,
  python (>= 2.4),
  turnkey-pylib (>= 0.4),
