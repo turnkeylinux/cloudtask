@@ -41,7 +41,7 @@ addresses from text file listing.
 .sp
 \fIpath/to/list\-of\-ips\fP := the file location of a text file containing a
 list of IP addresses of workers to destroy. IPs of workers that are
-sucessfully destroyed will be removed from this list.
+successfully destroyed will be removed from this list.
 .sp
 If \(aq\-\(aq is specified, read list of IPs from stdin.
 .SH OPTIONS

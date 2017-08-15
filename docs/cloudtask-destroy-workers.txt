@@ -27,7 +27,7 @@ ARGUMENTS
 
 `path/to/list-of-ips` := the file location of a text file containing a
 list of IP addresses of workers to destroy. IPs of workers that are
-sucessfully destroyed will be removed from this list.
+successfully destroyed will be removed from this list.
 
 If '-' is specified, read list of IPs from stdin.
 
