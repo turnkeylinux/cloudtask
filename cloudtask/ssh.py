@@ -16,6 +16,7 @@ from command import Command
 from temp import TempFile
 import executil
 import hashlib
+from pipes import quote
 
 class PrivateKey:
     class Error(Exception):
@@ -134,12 +135,11 @@ class SSH:
         if not isinstance(key, PrivateKey):
             key = PrivateKey(key)
 
-        command = 'mkdir -p $HOME/.ssh; cat >> $HOME/.ssh/authorized_keys'
+        authorized_key = "%s %s" % (key.public, key.fingerprint)
+        command = ("mkdir -p $HOME/.ssh; printf '%%s\\n' %s "
+                   ">> $HOME/.ssh/authorized_keys") % quote(authorized_key)
 
         command = self.command(command)
-        command.tochild.write("%s %s\n" % (key.public, key.fingerprint))
-        command.tochild.close()
-
         try:
             command.close()
         except command.Error, e:
